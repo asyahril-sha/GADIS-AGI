@@ -3,7 +3,7 @@
 
 """
 GADIS AGI ULTIMATE V3 - PRODUCTION MAIN
-Single Admin Version - Production Ready
+Single Admin Version - Fixed Event Loop
 """
 
 import os
@@ -54,7 +54,6 @@ class RateLimiter:
     
     def can_send(self) -> bool:
         now = time.time()
-        # Hapus yang lebih dari 60 detik
         while self.window and now - self.window[0] > 60:
             self.window.popleft()
         
@@ -73,24 +72,20 @@ class TaskSupervisor:
         self.running = True
     
     async def supervise(self, name: str, coro_func, *args, **kwargs):
-        """Supervise a task with auto-restart"""
         retries = 0
-        
         while retries < self.max_retries and self.running:
             try:
                 task = asyncio.create_task(coro_func(*args, **kwargs), name=name)
                 self.tasks[name] = task
                 await task
-                break  # Success, exit loop
+                break
             except asyncio.CancelledError:
                 logger.info(f"Task {name} cancelled")
                 break
             except Exception as e:
                 retries += 1
                 logger.error(f"Task {name} failed ({retries}/{self.max_retries}): {e}")
-                
                 if retries < self.max_retries:
-                    # Exponential backoff
                     wait_time = 2 ** retries
                     logger.info(f"Restarting {name} in {wait_time}s...")
                     await asyncio.sleep(wait_time)
@@ -99,7 +94,6 @@ class TaskSupervisor:
             del self.tasks[name]
     
     async def stop_all(self):
-        """Stop all supervised tasks"""
         self.running = False
         for name, task in list(self.tasks.items()):
             if not task.done():
@@ -119,11 +113,9 @@ class GadisUltimateBot:
         self.application = None
         self.brain: Optional[Brain] = None
         self.admin_id = self.config.ADMIN_ID
+        self._shutdown_event = asyncio.Event()
         
-        # Thread pool untuk blocking operations
         self.thread_pool = ThreadPoolExecutor(max_workers=2)
-        
-        # Rate limiter untuk error handler
         self.error_rate_limiter = RateLimiter(max_per_minute=3)
         
         # AI Infra components
@@ -145,12 +137,9 @@ class GadisUltimateBot:
         self.handlers = TelegramHandlers(self)
         
         logger.info("Core systems initialized")
-        
-        # Register shutdown hook
         self.lifecycle.register_shutdown_hook(self.shutdown)
     
     async def build_app(self):
-        """Build Telegram application"""
         request = HTTPXRequest(
             connection_pool_size=20,
             connect_timeout=30,
@@ -165,18 +154,12 @@ class GadisUltimateBot:
             .build()
         )
         
-        # Setup handlers
         await self.handlers.setup(self.application)
-        
         self.application.add_error_handler(self.error_handler)
-        
         logger.info("Application built")
     
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
-        """Global error handler dengan rate limiting"""
         logger.error(f"Unhandled exception: {context.error}", exc_info=context.error)
-        
-        # Notify admin dengan rate limiting
         if self.admin_id and self.error_rate_limiter.can_send():
             try:
                 await context.bot.send_message(
@@ -187,8 +170,6 @@ class GadisUltimateBot:
                 logger.error(f"Failed to send error notification: {e}")
     
     async def set_brain(self, brain: Brain):
-        """Set brain instance dengan cleanup brain lama"""
-        # Stop brain lama jika berbeda
         if self.brain and self.brain.user_id != brain.user_id:
             logger.info(f"Stopping old brain for user {self.brain.user_id}")
             await self.brain.stop()
@@ -196,23 +177,17 @@ class GadisUltimateBot:
         self.brain = brain
         logger.info(f"Brain set for user {brain.user_id}")
         
-        # Setup state manager untuk admin
         if brain.user_id == self.admin_id:
             self.state_manager = AIStateManager(self.db, self.admin_id)
             await self._load_initial_state()
-            
-            # Restart background tasks dengan brain baru
             await self._restart_background_tasks()
     
     async def _load_initial_state(self):
-        """Load initial state untuk admin"""
         if self.state_manager and self.brain:
             await self.state_manager.load_state(self.brain)
             logger.info("Initial state loaded for admin")
     
     async def _restart_background_tasks(self):
-        """Restart background tasks dengan aman"""
-        # Stop existing tasks dengan timeout
         try:
             await asyncio.wait_for(self.background_tasks.stop_all(), timeout=5.0)
         except asyncio.TimeoutError:
@@ -222,36 +197,31 @@ class GadisUltimateBot:
         await self._start_background_tasks()
     
     async def _start_background_tasks(self):
-        """Start semua background tasks dengan supervisor"""
         if not self.brain:
             logger.warning("Brain not ready, skipping background tasks")
             return
         
-        # Emotional scheduler
         self.emotional_scheduler = EmotionalScheduler(self.brain.emotion)
-        self.task_supervisor.supervise(
+        asyncio.create_task(self.task_supervisor.supervise(
             "emotional_scheduler",
             self._run_emotional_scheduler
-        )
+        ))
         
-        # Memory consolidation - di thread pool
-        self.task_supervisor.supervise(
+        asyncio.create_task(self.task_supervisor.supervise(
             "memory_consolidation",
             self._run_memory_consolidation
-        )
+        ))
         
-        # State saving (khusus admin)
         if self.state_manager and self.brain.user_id == self.admin_id:
-            self.task_supervisor.supervise(
+            asyncio.create_task(self.task_supervisor.supervise(
                 "state_saving",
                 self._run_state_saving
-            )
+            ))
         
         logger.info("Background tasks started with supervisor")
     
     async def _run_emotional_scheduler(self):
-        """Run emotional scheduler dengan interval"""
-        while True:
+        while not self._shutdown_event.is_set():
             try:
                 await asyncio.sleep(Config.EMOTIONAL_UPDATE_INTERVAL)
                 if self.emotional_scheduler:
@@ -262,8 +232,7 @@ class GadisUltimateBot:
                 logger.error(f"Emotional scheduler error: {e}")
     
     async def _run_memory_consolidation(self):
-        """Run memory consolidation di thread pool"""
-        while True:
+        while not self._shutdown_event.is_set():
             try:
                 await asyncio.sleep(Config.MEMORY_CONSOLIDATION_INTERVAL)
                 if self.brain:
@@ -278,8 +247,7 @@ class GadisUltimateBot:
                 logger.error(f"Memory consolidation error: {e}")
     
     async def _run_state_saving(self):
-        """Run periodic state saving"""
-        while True:
+        while not self._shutdown_event.is_set():
             try:
                 await asyncio.sleep(Config.STATE_SAVE_INTERVAL)
                 if self.state_manager and self.brain:
@@ -290,27 +258,20 @@ class GadisUltimateBot:
                 logger.error(f"State saving error: {e}")
     
     def _setup_signal_handlers(self):
-        """Setup signal handlers dengan aman"""
         try:
             loop = asyncio.get_running_loop()
             for sig in (signal.SIGTERM, signal.SIGINT):
                 try:
-                    loop.add_signal_handler(sig, self.lifecycle.request_shutdown)
+                    loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
                 except NotImplementedError:
                     logger.warning(f"Signal handler not implemented for {sig}")
         except Exception as e:
             logger.warning(f"Could not setup signal handlers: {e}")
     
     async def run(self):
-        """Main run loop"""
         try:
-            # Build app
             await self.build_app()
             
-            # Setup lifecycle
-            self.lifecycle.start_time = datetime.now()
-            
-            # Get Railway URL
             railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
             if not railway_url:
                 raise RuntimeError("RAILWAY_PUBLIC_DOMAIN not set")
@@ -321,16 +282,12 @@ class GadisUltimateBot:
             logger.info(f"Starting webhook server on port {port}")
             logger.info(f"Webhook URL: {webhook_url}")
             
-            # Setup signal handlers
             self._setup_signal_handlers()
-            
-            # Print startup banner
             self._print_banner(port, railway_url)
             
-            # Start lifecycle
             await self.lifecycle.start(self)
             
-            # Start webhook (blocks)
+            # Run webhook - this blocks until shutdown
             await self.application.run_webhook(
                 listen="0.0.0.0",
                 port=port,
@@ -345,7 +302,6 @@ class GadisUltimateBot:
             raise
     
     def _print_banner(self, port: int, url: str):
-        """Print startup banner"""
         print("\n" + "="*60)
         print("🚀 GADIS AGI ULTIMATE V3.0")
         print("="*60)
@@ -369,7 +325,10 @@ class GadisUltimateBot:
         """Graceful shutdown"""
         logger.info("🔄 Graceful shutdown initiated")
         
-        # Save final state untuk admin
+        # Set shutdown event
+        self._shutdown_event.set()
+        
+        # Save final state
         if self.state_manager and self.brain and self.brain.user_id == self.admin_id:
             try:
                 await self.state_manager.save_state(self.brain)
@@ -396,7 +355,7 @@ class GadisUltimateBot:
                 logger.error(f"Error stopping application: {e}")
         
         # Shutdown thread pool
-        self.thread_pool.shutdown(wait=True)  # Wait for pending tasks
+        self.thread_pool.shutdown(wait=False)
         
         # Stop lifecycle
         await self.lifecycle.shutdown()
@@ -406,9 +365,7 @@ class GadisUltimateBot:
 
 # ================= MAIN =================
 async def main():
-    """Main entry point"""
     bot = GadisUltimateBot()
-    
     try:
         await bot.run()
     except KeyboardInterrupt:
