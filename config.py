@@ -1,13 +1,18 @@
+"""
+KONFIGURASI BOT - Semua pengaturan dalam satu tempat
+"""
+
 import os
 from dotenv import load_dotenv
 from pathlib import Path
 
+# Load environment variables
 load_dotenv()
 
 class Config:
     """Konfigurasi bot ultimate"""
     
-    # ===== TOKENS =====
+    # ===== TOKEN & API =====
     TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
     ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
@@ -24,30 +29,63 @@ class Config:
     # ===== RATE LIMIT =====
     MAX_MESSAGES_PER_MINUTE = int(os.getenv("MAX_MESSAGES_PER_MINUTE", "15"))
     
-    # ===== LEVELING =====
+    # ===== LEVELING SYSTEM =====
     START_LEVEL = 1
     TARGET_LEVEL = 12
     RESET_LEVEL_AFTER_12 = 7
-    MESSAGES_PER_LEVEL = 10
+    MESSAGES_PER_LEVEL = 10  # 10 pesan = naik 1 level
     
-    # ===== ROLE COUNT =====
+    # ===== 9 ROLE PREMIUM =====
     ROLES = [
-        "ipar", "teman_kantor", "janda", "pelakor", 
-        "istri_orang", "pdkt", "sepupu", "mantan", "teman_sma"
+        "ipar",              # Saudara ipar
+        "teman_kantor",      # Rekan kerja
+        "janda",             # Janda muda
+        "pelakor",           # Perebut laki orang
+        "istri_orang",       # Istri orang lain
+        "pdkt",              # Pendekatan
+        "sepupu",            # Hubungan keluarga
+        "mantan",            # Mantan pacar
+        "teman_sma"          # Teman SMA
+    ]
+    
+    # ===== DOMINANCE LEVELS =====
+    DOMINANCE_LEVELS = {
+        1: "Patuh - Manut, menurut",
+        2: "Switch - Bisa dua arah",
+        3: "Dominan - Memegang kendali",
+        4: "Sangat Dominan - Kontrol penuh",
+        5: "Agresif - Kasar, BDSM"
+    }
+    
+    # ===== PUBLIC SEX LOCATIONS =====
+    PUBLIC_LOCATIONS = [
+        "toilet umum",
+        "mobil",
+        "taman kota",
+        "bioskop",
+        "pantai",
+        "lift",
+        "tangga darurat",
+        "balkon hotel",
+        "kamar mandi pesawat",
+        "belakang gedung"
     ]
     
     @classmethod
     def validate(cls):
+        """Validasi konfigurasi penting"""
         if not cls.TELEGRAM_TOKEN:
-            print("❌ TELEGRAM_TOKEN tidak ditemukan")
+            print("❌ ERROR: TELEGRAM_TOKEN tidak ditemukan di .env")
             return False
         if not cls.DEEPSEEK_API_KEY:
-            print("❌ DEEPSEEK_API_KEY tidak ditemukan")
+            print("❌ ERROR: DEEPSEEK_API_KEY tidak ditemukan di .env")
             return False
         return True
     
     @classmethod
     def create_dirs(cls):
+        """Buat folder yang diperlukan"""
         Path("data").mkdir(exist_ok=True)
         Path("logs").mkdir(exist_ok=True)
         Path("memory").mkdir(exist_ok=True)
+        print("✅ Folders created")
