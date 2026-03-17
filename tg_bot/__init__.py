@@ -1,9 +1,9 @@
 """
-TELEGRAM PACKAGE - Inisialisasi semua handlers
+TELEGRAM BOT PACKAGE - Inisialisasi semua handlers
 """
 
-from telegram.handlers import TelegramHandlers
-from telegram.commands import AdditionalCommands
+from tg_bot.handlers import TelegramHandlers
+from tg_bot.commands import AdditionalCommands
 
 __all__ = [
     'TelegramHandlers',
