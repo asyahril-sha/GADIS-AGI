@@ -1,6 +1,6 @@
 """
 TELEGRAM HANDLERS - Menangani semua interaksi dengan user
-Versi Simple dengan debug logging
+FIXED VERSION - Dengan debug lengkap untuk /start
 """
 
 import logging
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class TelegramHandlers:
     """
-    Handler untuk semua interaksi Telegram - Simple Version
+    Handler untuk semua interaksi Telegram - FIXED VERSION
     """
     
     def __init__(self, bot):
@@ -129,63 +129,29 @@ class TelegramHandlers:
             logger.error(f"❌ Error in setup: {e}")
             logger.error(traceback.format_exc())
     
-    # ===== START COMMAND =====
+    # ===== START COMMAND - FIXED VERSION =====
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command"""
+        """Handle /start command - FIXED VERSION"""
         try:
-            logger.info("🔥🔥🔥 CMD_START DIPANGGIL!")
-            logger.info(f"Update: {update}")
-            logger.info(f"User: {update.effective_user}")
+            print("\n" + "="*60)
+            print("🔥🔥🔥 CMD_START DIPANGGIL!")
+            print("="*60)
             
             user = update.effective_user
             user_id = user.id
             username = user.username or user.first_name
             
-            logger.info(f"▶️ /start from {username} (ID: {user_id})")
+            print(f"📌 User ID: {user_id}")
+            print(f"📌 Username: {username}")
+            print(f"📌 First name: {user.first_name}")
+            print(f"📌 Chat ID: {update.effective_chat.id}")
             
-            # Save user ke database
-            try:
-                self.db.save_user(user_id, username, user.first_name, "none")
-                logger.info("✅ User saved to database")
-            except Exception as e:
-                logger.error(f"❌ Database error: {e}")
-            
-            # Cek apakah sudah ada session aktif
-            if user_id in self.sessions:
-                logger.info(f"User {user_id} already has active session")
-                await update.message.reply_text(
-                    "💕 Kamu sudah memiliki sesi aktif. Ketik /status untuk melihat status."
-                )
-                return SELECTING_ROLE
-            
-            # Cek apakah ada session di database
-            try:
-                rels = self.db.get_user_relationships(user_id)
-                logger.info(f"📊 Found {len(rels)} relationships in DB")
-            except Exception as e:
-                logger.error(f"❌ Error getting relationships: {e}")
-                rels = []
-            
-            if rels:
-                logger.info("Showing load/new menu")
-                keyboard = [
-                    [InlineKeyboardButton("📂 Load Hubungan", callback_data="load_relationship")],
-                    [InlineKeyboardButton("🆕 Mulai Baru", callback_data="new_relationship")],
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await update.message.reply_text(
-                    "📂 **Ada hubungan tersimpan!**\n\n"
-                    "Pilih untuk melanjutkan atau mulai baru:",
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown'
-                )
-                return SELECTING_ROLE
+            # KIRIM PESAN TEST SEDERHANA
+            await update.message.reply_text("✅ Bot menerima perintah /start")
+            print("✅ Pesan test terkirim")
             
             # Tampilkan menu role
-            logger.info("🎯 Showing role menu")
-            
             keyboard = [
                 [InlineKeyboardButton("👨‍👩‍👧‍👦 Ipar", callback_data="role_ipar")],
                 [InlineKeyboardButton("💼 Teman Kantor", callback_data="role_teman_kantor")],
@@ -199,20 +165,19 @@ class TelegramHandlers:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            sent_message = await update.message.reply_text(
-                "✨ **GADIS AGI ULTIMATE V3.0** ✨\n\n"
-                "Pilih role untuk memulai petualanganmu:",
+            sent = await update.message.reply_text(
+                "✨ **Pilih Role untukmu:**",
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
+            print(f"✅ Menu role terkirim, message_id: {sent.message_id}")
             
-            logger.info(f"✅ Menu role sent: {sent_message.message_id}")
             return SELECTING_ROLE
             
         except Exception as e:
-            logger.error(f"❌ Error in cmd_start: {e}")
-            logger.error(traceback.format_exc())
-            await update.message.reply_text(f"⚠️ Error: {str(e)}")
+            print(f"❌ ERROR di cmd_start: {e}")
+            traceback.print_exc()
+            await update.message.reply_text(f"❌ Error: {str(e)}")
             return SELECTING_ROLE
     
     # ===== ROLE CALLBACK =====
@@ -226,107 +191,48 @@ class TelegramHandlers:
             user_id = query.from_user.id
             data = query.data
             
-            logger.info(f"📞 Role callback: {data} from user {user_id}")
+            print(f"📞 Role callback: {data} from user {user_id}")
             
-            if data == "load_relationship":
-                try:
-                    rels = self.db.get_user_relationships(user_id)
-                    if rels:
-                        rel = rels[0]
-                        self.sessions[user_id] = {
-                            'name': rel['bot_name'],
-                            'role': rel['role'],
-                            'level': rel['level'],
-                            'messages': rel.get('total_messages', 0),
-                            'bot_climax': rel.get('bot_climax', 0),
-                            'user_climax': rel.get('user_climax', 0),
-                            'together_climax': rel.get('together_climax', 0),
-                            'relationship_status': rel['jenis'],
-                            'unique_id': rel['unique_id'],
-                            'last_active': datetime.now().isoformat()
-                        }
-                        
-                        await query.edit_message_text(
-                            f"📂 **Hubungan dimuat!**\n\n"
-                            f"{rel['bot_name']} ({rel['role']}) - Level {rel['level']}\n"
-                            f"Lanjutkan ngobrol ya... 💕",
-                            parse_mode='Markdown'
-                        )
-                        logger.info(f"✅ Relationship loaded for user {user_id}")
-                    else:
-                        await query.edit_message_text("❌ Tidak ada hubungan tersimpan.")
-                    
-                except Exception as e:
-                    logger.error(f"❌ Error loading relationship: {e}")
-                    await query.edit_message_text(f"❌ Error: {str(e)}")
-                
-                return ConversationHandler.END
-            
-            elif data == "new_relationship":
-                keyboard = [
-                    [InlineKeyboardButton("👨‍👩‍👧‍👦 Ipar", callback_data="role_new_ipar")],
-                    [InlineKeyboardButton("💼 Teman Kantor", callback_data="role_new_teman_kantor")],
-                    [InlineKeyboardButton("💃 Janda", callback_data="role_new_janda")],
-                    [InlineKeyboardButton("🦹 Pelakor", callback_data="role_new_pelakor")],
-                    [InlineKeyboardButton("💍 Istri Orang", callback_data="role_new_istri_orang")],
-                    [InlineKeyboardButton("🌿 PDKT", callback_data="role_new_pdkt")],
-                    [InlineKeyboardButton("👥 Sepupu", callback_data="role_new_sepupu")],
-                    [InlineKeyboardButton("💔 Mantan", callback_data="role_new_mantan")],
-                    [InlineKeyboardButton("🏫 Teman SMA", callback_data="role_new_teman_sma")],
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await query.edit_message_text(
-                    "✨ **Pilih Role untukmu:**",
-                    reply_markup=reply_markup
-                )
-                return SELECTING_ROLE
-            
-            elif data.startswith("role_new_"):
-                role = data.replace("role_new_", "")
-                await self._create_relationship(user_id, role, query)
-                return ConversationHandler.END
-            
-            elif data.startswith("role_"):
+            if data.startswith("role_"):
                 role = data.replace("role_", "")
-                await self._create_relationship(user_id, role, query)
+                
+                # Pilih nama random sesuai role
+                name = random.choice(Config.ROLE_NAMES.get(role, ["Aurora"]))
+                
+                # Buat session sederhana
+                self.sessions[user_id] = {
+                    'name': name,
+                    'role': role,
+                    'level': 1,
+                    'messages': 0,
+                    'bot_climax': 0,
+                    'user_climax': 0,
+                    'together_climax': 0,
+                    'relationship_status': 'PDKT',
+                    'last_active': datetime.now().isoformat()
+                }
+                
+                # Save user ke database
+                self.db.save_user(user_id, query.from_user.username, query.from_user.first_name, role)
+                
+                # Dapatkan intro dari role
+                from systems.role_archetypes import RoleFactory
+                role_obj = RoleFactory.create(role)
+                intro = role_obj.get_intro()
+                intro += f"\n\n✨ **Level 1/12** - Ayo ngobrol dan kenali aku! 💕"
+                
+                await query.edit_message_text(intro, parse_mode='Markdown')
+                print(f"✅ Role {role} selected for user {user_id}")
+                
                 return ConversationHandler.END
+            
+            return ConversationHandler.END
             
         except Exception as e:
-            logger.error(f"❌ Error in role_callback: {e}")
+            print(f"❌ Error in role_callback: {e}")
+            traceback.print_exc()
             await query.edit_message_text(f"❌ Error: {str(e)}")
             return ConversationHandler.END
-    
-    async def _create_relationship(self, user_id: int, role: str, query):
-        """Create new relationship"""
-        try:
-            logger.info(f"🆕 Creating new relationship: user {user_id}, role {role}")
-            
-            role_obj = RoleFactory.create(role)
-            
-            self.sessions[user_id] = {
-                'name': role_obj.name,
-                'role': role,
-                'level': 1,
-                'messages': 0,
-                'bot_climax': 0,
-                'user_climax': 0,
-                'together_climax': 0,
-                'relationship_status': 'PDKT',
-                'last_active': datetime.now().isoformat()
-            }
-            
-            self.db.save_user(user_id, query.from_user.username, query.from_user.first_name, role)
-            
-            intro = role_obj.get_intro()
-            intro += f"\n\n✨ **Level 1/12** - Ayo ngobrol dan kenali aku! 💕"
-            
-            await query.edit_message_text(intro, parse_mode='Markdown')
-            logger.info(f"✅ New relationship created for user {user_id}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error creating relationship: {e}")
-            await query.edit_message_text(f"❌ Gagal: {str(e)}")
     
     # ===== STATUS COMMAND =====
     
@@ -334,7 +240,7 @@ class TelegramHandlers:
         """Handle /status command"""
         try:
             user_id = update.effective_user.id
-            logger.info(f"📊 /status from user {user_id}")
+            print(f"📊 /status from user {user_id}")
             
             if user_id not in self.sessions:
                 await update.message.reply_text("❌ Belum ada hubungan. /start dulu ya!")
@@ -703,7 +609,7 @@ Ketik /start untuk memulai! 🔥
             user_id = user.id
             message = update.message.text
             
-            logger.info(f"📨 Message from {user_id}: {message[:50]}")
+            print(f"📨 Message from {user_id}: {message[:50]}")
             
             if user_id not in self.sessions:
                 await update.message.reply_text("❌ Belum ada hubungan. /start dulu!")
