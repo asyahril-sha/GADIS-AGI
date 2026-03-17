@@ -9,6 +9,7 @@ import asyncio
 import traceback
 from datetime import datetime
 from typing import Dict, Any, Optional
+from infra.request_queue import RequestQueue
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
