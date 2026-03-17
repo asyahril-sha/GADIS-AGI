@@ -3,8 +3,7 @@
 
 """
 GADIS AGI ULTIMATE V3 - PRODUCTION READY
-Arsitektur Sederhana untuk Single Admin
-FULL VERSION dengan logging lengkap
+FIXED VERSION - /start working
 """
 
 import os
@@ -35,7 +34,7 @@ Config.create_dirs()
 
 
 class SimpleBot:
-    """Bot sederhana untuk single admin"""
+    """Bot sederhana untuk single admin - FIXED VERSION"""
     
     def __init__(self):
         self.config = Config
@@ -126,14 +125,15 @@ class SimpleBot:
                 logger.error(f"Failed to send error notification: {e}")
     
     async def start(self):
-        """Start bot"""
+        """Start bot - FIXED VERSION"""
         try:
             logger.info("🚀 Starting bot...")
             
+            # Step 1: Build app
             logger.info("🔨 Step 1: Building app...")
             await self.build_app()
             
-            # Get Railway URL
+            # Step 2: Get Railway URL
             railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
             logger.info(f"🔨 Step 2: Railway URL = {railway_url}")
             
@@ -144,23 +144,43 @@ class SimpleBot:
             webhook_url = f"https://{railway_url}/webhook"
             port = int(os.getenv("PORT", 8080))
             
-            logger.info(f"🔨 Step 3: Setting webhook to {webhook_url}")
+            logger.info(f"🔨 Step 3: Webhook URL = {webhook_url}")
             
-            # Set webhook
+            # Step 4: Hapus webhook lama (bersihkan pending updates)
+            logger.info("🔨 Step 4: Deleting old webhook...")
+            await self.application.bot.delete_webhook(drop_pending_updates=True)
+            
+            # Step 5: Set webhook baru
+            logger.info(f"🔨 Step 5: Setting webhook to {webhook_url}")
             result = await self.application.bot.set_webhook(
                 url=webhook_url,
                 allowed_updates=["message", "callback_query"],
                 max_connections=40
             )
-            logger.info(f"🔨 Step 4: Webhook set result = {result}")
+            logger.info(f"🔨 Step 5: Webhook set result = {result}")
             
             if not result:
                 logger.error("❌ Failed to set webhook")
                 sys.exit(1)
             
-            logger.info("🔨 Step 5: Starting application...")
+            # Step 6: Cek webhook info
+            webhook_info = await self.application.bot.get_webhook_info()
+            logger.info(f"🔨 Step 6: Webhook info = {webhook_info.url}")
+            logger.info(f"🔨 Step 6: Pending updates = {webhook_info.pending_update_count}")
+            
+            # Step 7: Start application
+            logger.info("🔨 Step 7: Starting application...")
             await self.application.start()
-            logger.info("✅ Step 6: Application started successfully!")
+            logger.info("✅ Step 7: Application started successfully!")
+            
+            # Step 8: Start webhook server
+            logger.info("🔨 Step 8: Starting webhook server...")
+            await self.application.updater.start_webhook(
+                listen="0.0.0.0",
+                port=port,
+                url_path="webhook"
+            )
+            logger.info("✅ Step 8: Webhook server started!")
             
             self.is_ready = True
             
@@ -193,14 +213,12 @@ class SimpleBot:
         """Graceful shutdown"""
         logger.info("🔄 Shutting down...")
         
-        # Set shutdown event to break the main loop
+        # Set shutdown event
         self._shutdown_event.set()
         
         if self.application:
             try:
-                logger.info("🔄 Stopping application...")
                 await self.application.stop()
-                logger.info("🔄 Shutting down application...")
                 await self.application.shutdown()
                 logger.info("✅ Application stopped")
             except Exception as e:
