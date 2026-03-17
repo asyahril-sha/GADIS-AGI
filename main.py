@@ -3,7 +3,7 @@
 
 """
 GADIS AGI ULTIMATE V3 - PRODUCTION READY
-FIXED VERSION - /start working
+VERSI AIOHTTP - PASTI JALAN DI RAILWAY
 """
 
 import os
@@ -13,6 +13,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from aiohttp import web
 from telegram import Update
 from telegram.ext import Application, ContextTypes
 from telegram.request import HTTPXRequest
@@ -22,244 +23,142 @@ from database import Database
 from systems.hts_fwb_system import HTSFWBSystem, RankingSystem
 from tg_bot.handlers import TelegramHandlers
 
-# Setup logging
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger("GADIS_MAIN")
 
-# Buat folder yang diperlukan
 Config.create_dirs()
 
-
 class SimpleBot:
-    """Bot sederhana untuk single admin - FIXED VERSION"""
-    
     def __init__(self):
         self.config = Config
         self.start_time = datetime.now()
         self.application = None
         self.is_ready = False
-        self._shutdown_event = asyncio.Event()
         
-        # Validasi konfigurasi
         if not self.config.validate():
-            logger.error("❌ Config validation failed")
             sys.exit(1)
         
-        try:
-            # Initialize database
-            logger.info("📦 Initializing database...")
-            self.db = Database(Config.DB_PATH)
-            logger.info("✅ Database initialized")
-            
-            # Initialize systems
-            logger.info("⚙️ Initializing HTS/FWB system...")
-            self.hts_system = HTSFWBSystem(self.db)
-            self.ranking = RankingSystem(self.db)
-            logger.info("✅ Systems initialized")
-            
-            # Initialize handlers
-            logger.info("🎯 Initializing handlers...")
-            self.handlers = TelegramHandlers(self)
-            logger.info("✅ Handlers initialized")
-            
-            logger.info("✅ Bot initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize bot: {e}")
-            sys.exit(1)
+        logger.info("📦 Initializing database...")
+        self.db = Database(Config.DB_PATH)
+        
+        logger.info("⚙️ Initializing HTS/FWB system...")
+        self.hts_system = HTSFWBSystem(self.db)
+        self.ranking = RankingSystem(self.db)
+        
+        logger.info("🎯 Initializing handlers...")
+        self.handlers = TelegramHandlers(self)
+        
+        logger.info("✅ Bot initialized successfully")
     
     async def build_app(self):
-        """Build Telegram application"""
-        try:
-            logger.info("🔧 Building application...")
-            
-            request = HTTPXRequest(
-                connection_pool_size=10,
-                connect_timeout=30,
-                read_timeout=30
-            )
-            
-            self.application = (
-                Application.builder()
-                .token(self.config.TELEGRAM_TOKEN)
-                .request(request)
-                .build()
-            )
-            
-            # Setup handlers
-            logger.info("🔧 Registering handlers...")
-            await self.handlers.setup(self.application)
-            
-            # Add error handler
-            self.application.add_error_handler(self.error_handler)
-            
-            # Initialize
-            logger.info("🔧 Initializing application...")
-            await self.application.initialize()
-            
-            logger.info("✅ Application built successfully")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to build application: {e}")
-            sys.exit(1)
+        logger.info("🔧 Building application...")
+        
+        request = HTTPXRequest(
+            connection_pool_size=10,
+            connect_timeout=30,
+            read_timeout=30
+        )
+        
+        self.application = (
+            Application.builder()
+            .token(self.config.TELEGRAM_TOKEN)
+            .request(request)
+            .build()
+        )
+        
+        await self.handlers.setup(self.application)
+        self.application.add_error_handler(self.error_handler)
+        await self.application.initialize()
+        
+        logger.info("✅ Application built successfully")
     
-    async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
-        """Global error handler"""
+    async def error_handler(self, update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"❌ Error: {context.error}", exc_info=True)
-        
-        # Log update yang menyebabkan error
-        if update:
-            logger.error(f"Update that caused error: {update}")
-        
-        # Notify admin if configured
-        if self.config.ADMIN_ID:
-            try:
-                await context.bot.send_message(
-                    chat_id=self.config.ADMIN_ID,
-                    text=f"⚠️ Bot Error: {str(context.error)[:200]}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to send error notification: {e}")
     
     async def start(self):
-        """Start bot - FIXED VERSION"""
-        try:
-            logger.info("🚀 Starting bot...")
-            
-            # Step 1: Build app
-            logger.info("🔨 Step 1: Building app...")
-            await self.build_app()
-            
-            # Step 2: Get Railway URL
-            railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
-            logger.info(f"🔨 Step 2: Railway URL = {railway_url}")
-            
-            if not railway_url:
-                logger.error("❌ RAILWAY_PUBLIC_DOMAIN not set")
-                sys.exit(1)
-            
-            webhook_url = f"https://{railway_url}/webhook"
-            port = int(os.getenv("PORT", 8080))
-            
-            logger.info(f"🔨 Step 3: Webhook URL = {webhook_url}")
-            
-            # Step 4: Hapus webhook lama (bersihkan pending updates)
-            logger.info("🔨 Step 4: Deleting old webhook...")
-            await self.application.bot.delete_webhook(drop_pending_updates=True)
-            
-            # Step 5: Set webhook baru
-            logger.info(f"🔨 Step 5: Setting webhook to {webhook_url}")
-            result = await self.application.bot.set_webhook(
-                url=webhook_url,
-                allowed_updates=["message", "callback_query"],
-                max_connections=40
-            )
-            logger.info(f"🔨 Step 5: Webhook set result = {result}")
-            
-            if not result:
-                logger.error("❌ Failed to set webhook")
-                sys.exit(1)
-            
-            # Step 6: Cek webhook info
-            webhook_info = await self.application.bot.get_webhook_info()
-            logger.info(f"🔨 Step 6: Webhook info = {webhook_info.url}")
-            logger.info(f"🔨 Step 6: Pending updates = {webhook_info.pending_update_count}")
-            
-            # Step 7: Start application
-            logger.info("🔨 Step 7: Starting application...")
-            await self.application.start()
-            logger.info("✅ Step 7: Application started successfully!")
-            
-            # Step 8: Start webhook server
-            logger.info("🔨 Step 8: Starting webhook server...")
-            await self.application.updater.start_webhook(
-                listen="0.0.0.0",
-                port=port,
-                url_path="webhook"
-            )
-            logger.info("✅ Step 8: Webhook server started!")
-            
-            self.is_ready = True
-            
-            # Print banner
-            self._print_banner(webhook_url, port)
-            
-            logger.info("✅ Bot is now running and ready to receive updates")
-            
-            # Keep running until shutdown event
-            await self._shutdown_event.wait()
-            
-        except Exception as e:
-            logger.error(f"❌ FATAL ERROR in start(): {e}", exc_info=True)
-            await self.shutdown()
+        await self.build_app()
+        
+        railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
+        if not railway_url:
+            logger.error("❌ RAILWAY_PUBLIC_DOMAIN not set")
             sys.exit(1)
-    
-    def _print_banner(self, webhook_url: str, port: int):
-        """Print startup banner"""
+        
+        webhook_url = f"https://{railway_url}/webhook"
+        port = int(os.getenv("PORT", 8080))
+        
+        logger.info(f"📡 Setting webhook to {webhook_url}")
+        await self.application.bot.delete_webhook(drop_pending_updates=True)
+        
+        result = await self.application.bot.set_webhook(
+            url=webhook_url,
+            allowed_updates=["message", "callback_query"],
+            max_connections=40
+        )
+        logger.info(f"✅ Webhook set result: {result}")
+        
+        webhook_info = await self.application.bot.get_webhook_info()
+        logger.info(f"📋 Webhook info: {webhook_info.url}")
+        logger.info(f"📊 Pending updates: {webhook_info.pending_update_count}")
+        
+        await self.application.start()
+        logger.info("✅ Application started")
+        
+        # ===== AIOHTTP SERVER =====
+        async def webhook_handler(request):
+            try:
+                update_data = await request.json()
+                logger.debug(f"📥 Webhook received")
+                
+                update = Update.de_json(update_data, self.application.bot)
+                asyncio.create_task(self.application.process_update(update))
+                
+                return web.Response(text='OK')
+            except Exception as e:
+                logger.error(f"❌ Webhook error: {e}")
+                return web.Response(status=500)
+        
+        app = web.Application()
+        app.router.add_post('/webhook', webhook_handler)
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        
+        logger.info(f"✅ AIOHTTP server running on port {port}")
+        self.is_ready = True
+        
         print("\n" + "="*70)
         print("🚀 GADIS AGI ULTIMATE V3.0")
         print("="*70)
         print(f"🌐 Webhook URL: {webhook_url}")
         print(f"📡 Port: {port}")
         print(f"👤 Admin ID: {self.config.ADMIN_ID}")
-        print(f"⏰ Started at: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         print("\n✅ Bot is running!")
         print("="*70 + "\n")
+        
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            await self.shutdown()
     
     async def shutdown(self):
-        """Graceful shutdown"""
         logger.info("🔄 Shutting down...")
-        
-        # Set shutdown event
-        self._shutdown_event.set()
-        
         if self.application:
-            try:
-                await self.application.stop()
-                await self.application.shutdown()
-                logger.info("✅ Application stopped")
-            except Exception as e:
-                logger.error(f"❌ Error stopping application: {e}")
-        
+            await self.application.stop()
+            await self.application.shutdown()
         logger.info("✅ Shutdown complete")
-    
-    def get_uptime(self) -> str:
-        """Get bot uptime"""
-        delta = datetime.now() - self.start_time
-        hours = delta.total_seconds() / 3600
-        minutes = (delta.total_seconds() / 60) % 60
-        
-        if hours < 1:
-            return f"{int(minutes)} menit"
-        return f"{hours:.1f} jam"
 
-
-# ================= MAIN =================
 async def main():
-    """Main entry point"""
-    logger.info("="*50)
-    logger.info("🚀 STARTING GADIS AGI BOT")
-    logger.info("="*50)
-    
     bot = SimpleBot()
-    
     try:
         await bot.start()
     except KeyboardInterrupt:
-        logger.info("📟 Received keyboard interrupt")
         await bot.shutdown()
-    except Exception as e:
-        logger.critical(f"💥 Fatal error: {e}", exc_info=True)
-        await bot.shutdown()
-        sys.exit(1)
-    finally:
-        logger.info("="*50)
-        logger.info("🏁 BOT STOPPED")
-        logger.info("="*50)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
