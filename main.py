@@ -150,18 +150,28 @@ def webhook():
         update_data = request.get_json(force=True)
         update_id = update_data.get('update_id', 'unknown')
         
-        logger.debug(f"📥 Webhook received - Update ID: {update_id}")
+        logger.info(f"📥 Webhook received - Update ID: {update_id}")
         
         # Buat update object
         update = Update.de_json(update_data, bot.app.bot)
         
-        # Proses update di event loop yang sama
-        asyncio.run_coroutine_threadsafe(
-            bot.app.process_update(update),
-            asyncio.get_event_loop()
-        )
+        # Dapatkan atau buat event loop untuk thread ini
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Jalankan coroutine di loop
+        loop.run_until_complete(bot.app.process_update(update))
         
         return 'OK', 200
+    
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
     
     except Exception as e:
         logger.error(f"Webhook error: {e}")
