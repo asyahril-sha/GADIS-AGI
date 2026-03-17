@@ -33,6 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 Config.create_dirs()
+self.db = Database(Config.DB_PATH)
 
 flask_app = Flask(__name__)
 
