@@ -48,6 +48,19 @@ class Config:
         "teman_sma"          # Teman SMA
     ]
     
+    # ===== ROLE NAMES untuk random name =====
+    ROLE_NAMES = {
+        "ipar": ["Sari", "Dewi", "Rina", "Maya", "Wulan", "Indah", "Lestari", "Fitri"],
+        "teman_kantor": ["Diana", "Linda", "Ayu", "Dita", "Vina", "Santi", "Rini", "Mega"],
+        "janda": ["Rina", "Tuti", "Nina", "Susi", "Wati", "Lilis", "Marni", "Yati"],
+        "pelakor": ["Vina", "Sasha", "Bella", "Cantika", "Karina", "Mira", "Selsa", "Cindy"],
+        "istri_orang": ["Dewi", "Sari", "Rina", "Linda", "Wulan", "Indah", "Ratna", "Maya"],
+        "pdkt": ["Aurora", "Cinta", "Dewi", "Kirana", "Laras", "Maharani", "Zahra", "Nova"],
+        "sepupu": ["Dina", "Nina", "Tika", "Rara", "Sasa", "Mira", "Lani", "Vera"],
+        "mantan": ["Sarah", "Putri", "Maya", "Anita", "Rika", "Dian", "Nita", "Siska"],
+        "teman_sma": ["Wulan", "Desi", "Ratna", "Mega", "Lina", "Tari", "Sari", "Dewi"]
+    }
+    
     # ===== DOMINANCE LEVELS =====
     DOMINANCE_LEVELS = {
         1: "Patuh - Manut, menurut",
