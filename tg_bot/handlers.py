@@ -5,6 +5,7 @@ TELEGRAM HANDLERS - Menangani semua interaksi dengan user
 import logging
 import random
 import asyncio
+import traceback
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -136,18 +137,24 @@ class TelegramHandlers:
     # ===== START COMMAND =====
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command"""
+        """Handle /start command dengan debug lengkap"""
         try:
             user = update.effective_user
             user_id = user.id
             username = user.username or user.first_name
         
             logger.info(f"▶️ /start from {username} (ID: {user_id})")
+            logger.info(f"Step 1: User identified")
         
             # Save user ke database
-            self.db.save_user(user_id, username, user.first_name, "none")
+            try:
+                self.db.save_user(user_id, username, user.first_name, "none")
+                logger.info(f"Step 2: User saved to database")
+            except Exception as e:
+                logger.error(f"Step 2 ERROR: {e}")
         
             # Cek apakah sudah ada session aktif
+            logger.info(f"Step 3: Checking active session - in sessions: {user_id in self.sessions}")
             if user_id in self.sessions:
                 await update.message.reply_text(
                     "💕 Kamu sudah memiliki sesi aktif. Ketik /status untuk melihat status."
@@ -155,8 +162,15 @@ class TelegramHandlers:
                 return
         
             # Cek apakah ada session di database
-            rels = self.db.get_user_relationships(user_id)
+            try:
+                rels = self.db.get_user_relationships(user_id)
+                logger.info(f"Step 4: Got {len(rels)} relationships from DB")
+            except Exception as e:
+                logger.error(f"Step 4 ERROR: {e}")
+                rels = []
+        
             if rels:
+                logger.info(f"Step 5: Showing load/new menu")
                 keyboard = [
                     [InlineKeyboardButton("📂 Load Hubungan", callback_data="load_relationship")],
                     [InlineKeyboardButton("🆕 Mulai Baru", callback_data="new_relationship")],
@@ -169,34 +183,42 @@ class TelegramHandlers:
                     reply_markup=reply_markup,
                     parse_mode='Markdown'
                 )
+                logger.info(f"Step 5a: Load/new menu sent")
                 return SELECTING_ROLE
         
             # Tampilkan menu role
-            keyboard = [
-                [InlineKeyboardButton("👨‍👩‍👧‍👦 Ipar", callback_data="role_ipar")],
-                [InlineKeyboardButton("💼 Teman Kantor", callback_data="role_teman_kantor")],
-                [InlineKeyboardButton("💃 Janda", callback_data="role_janda")],
-                [InlineKeyboardButton("🦹 Pelakor", callback_data="role_pelakor")],
-                [InlineKeyboardButton("💍 Istri Orang", callback_data="role_istri_orang")],
-                [InlineKeyboardButton("🌿 PDKT", callback_data="role_pdkt")],
-                [InlineKeyboardButton("👥 Sepupu", callback_data="role_sepupu")],
-                [InlineKeyboardButton("💔 Mantan", callback_data="role_mantan")],
-                [InlineKeyboardButton("🏫 Teman SMA", callback_data="role_teman_sma")],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            logger.info(f"Step 6: Creating role menu")
         
-            await update.message.reply_text(
-                "✨ **GADIS AGI ULTIMATE V3.0** ✨\n\n"
-                "Pilih role untuk memulai petualanganmu:\n\n"
-                "Setiap role punya karakter dan cerita berbeda!",
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
+            # Buat keyboard sederhana dulu untuk test
+            keyboard = [
+                [InlineKeyboardButton("Test Role 1", callback_data="role_test1")],
+                [InlineKeyboardButton("Test Role 2", callback_data="role_test2")],
+            ]
+        
+            # Coba kirim pesan sederhana dulu
+            try:
+                await update.message.reply_text("Test message - bot berfungsi!")
+                logger.info(f"Step 6a: Test message sent")
+            except Exception as e:
+                logger.error(f"Step 6a ERROR: {e}")
+        
+            # Kirim menu role
+            try:
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    "✨ **TEST MENU** ✨\n\nPilih salah satu:",
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Step 6b: Role menu sent")
+            except Exception as e:
+                logger.error(f"Step 6b ERROR: {e}")
         
             return SELECTING_ROLE
         
         except Exception as e:
-            logger.error(f"ERROR in cmd_start: {e}", exc_info=True)
+            logger.error(f"❌ FATAL ERROR in cmd_start: {e}")
+            logger.error(traceback.format_exc())
             await update.message.reply_text(f"❌ Error: {str(e)}")
             return
     
