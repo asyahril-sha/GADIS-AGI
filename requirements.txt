@@ -5,11 +5,11 @@ python-telegram-bot[webhooks]==20.7
 aiohttp==3.9.1
 openai==1.12.0
 
-# Web Server (untuk health check opsional)
+# Web Server
 Flask==3.0.0
 gunicorn==21.2.0
 
 # Utilities
 python-dotenv==1.0.0
 requests==2.31.0
-numpy==1.23.5
+numpy==1.23.5  # ← versi ini stabil
