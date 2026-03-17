@@ -1,6 +1,6 @@
 """
 TELEGRAM HANDLERS - Menangani semua interaksi dengan user
-Versi dengan error handling di setiap command
+Versi dengan Request Queue integration dan semua bug fixes
 """
 
 import logging
@@ -9,7 +9,6 @@ import asyncio
 import traceback
 from datetime import datetime
 from typing import Dict, Any, Optional
-from infra.request_queue import RequestQueue
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -21,6 +20,7 @@ from config import Config
 from database import Database
 from systems.hts_fwb_system import HTSFWBSystem, RankingSystem
 from systems.role_archetypes import RoleFactory
+from core.brain import Brain
 
 # State untuk ConversationHandler
 SELECTING_ROLE = 0
@@ -50,11 +50,14 @@ class TelegramHandlers:
         # User sessions
         self.sessions = {}
         
+        # Request queue dari bot
+        self.request_queue = bot.request_queue if hasattr(bot, 'request_queue') else None
+        
         logger.info("✅ TelegramHandlers initialized")
     
     async def setup(self, app: Application):
         """
-        Setup semua handlers
+        Setup semua handlers dengan queue wrapper
         
         Args:
             app: Telegram Application instance
@@ -64,37 +67,37 @@ class TelegramHandlers:
             
             # Start conversation
             start_conv = ConversationHandler(
-                entry_points=[CommandHandler('start', self.cmd_start)],
+                entry_points=[CommandHandler('start', self._queue_wrapper(self.cmd_start))],
                 states={
                     SELECTING_ROLE: [
-                        CallbackQueryHandler(self.role_callback, pattern='^role_'),
+                        CallbackQueryHandler(self._queue_wrapper(self.role_callback), pattern='^role_'),
                     ],
                 },
-                fallbacks=[CommandHandler('cancel', self.cmd_cancel)],
+                fallbacks=[CommandHandler('cancel', self._queue_wrapper(self.cmd_cancel))],
                 name="start_conversation"
             )
             
             # Close conversation
             close_conv = ConversationHandler(
-                entry_points=[CommandHandler('close', self.cmd_close)],
+                entry_points=[CommandHandler('close', self._queue_wrapper(self.cmd_close))],
                 states={
                     CONFIRM_CLOSE: [
-                        CallbackQueryHandler(self.close_callback, pattern='^close_'),
+                        CallbackQueryHandler(self._queue_wrapper(self.close_callback), pattern='^close_'),
                     ],
                 },
-                fallbacks=[CommandHandler('cancel', self.cmd_cancel)],
+                fallbacks=[CommandHandler('cancel', self._queue_wrapper(self.cmd_cancel))],
                 name="close_conversation"
             )
             
             # End conversation
             end_conv = ConversationHandler(
-                entry_points=[CommandHandler('end', self.cmd_end)],
+                entry_points=[CommandHandler('end', self._queue_wrapper(self.cmd_end))],
                 states={
                     CONFIRM_END: [
-                        CallbackQueryHandler(self.end_callback, pattern='^end_'),
+                        CallbackQueryHandler(self._queue_wrapper(self.end_callback), pattern='^end_'),
                     ],
                 },
-                fallbacks=[CommandHandler('cancel', self.cmd_cancel)],
+                fallbacks=[CommandHandler('cancel', self._queue_wrapper(self.cmd_cancel))],
                 name="end_conversation"
             )
             
@@ -104,43 +107,62 @@ class TelegramHandlers:
             app.add_handler(end_conv)
             
             # ===== COMMAND HANDLERS =====
-            app.add_handler(CommandHandler("status", self.cmd_status))
-            app.add_handler(CommandHandler("help", self.cmd_help))
+            app.add_handler(CommandHandler("status", self._queue_wrapper(self.cmd_status)))
+            app.add_handler(CommandHandler("help", self._queue_wrapper(self.cmd_help)))
             
             # HTS/FWB commands
-            app.add_handler(CommandHandler("htslist", self.cmd_htslist))
-            app.add_handler(CommandHandler("fwblist", self.cmd_fwblist))
-            app.add_handler(CommandHandler("tophts", self.cmd_tophts))
+            app.add_handler(CommandHandler("htslist", self._queue_wrapper(self.cmd_htslist)))
+            app.add_handler(CommandHandler("fwblist", self._queue_wrapper(self.cmd_fwblist)))
+            app.add_handler(CommandHandler("tophts", self._queue_wrapper(self.cmd_tophts)))
             
             # Call handlers for specific IDs
             app.add_handler(MessageHandler(
-                filters.Regex(r'^/hts-'), self.cmd_hts_call
+                filters.Regex(r'^/hts-'), self._queue_wrapper(self.cmd_hts_call)
             ))
             app.add_handler(MessageHandler(
-                filters.Regex(r'^/fwb-'), self.cmd_fwb_call
+                filters.Regex(r'^/fwb-'), self._queue_wrapper(self.cmd_fwb_call)
             ))
             
             # Relationship commands
-            app.add_handler(CommandHandler("jadipacar", self.cmd_jadipacar))
-            app.add_handler(CommandHandler("break", self.cmd_break))
-            app.add_handler(CommandHandler("unbreak", self.cmd_unbreak))
-            app.add_handler(CommandHandler("breakup", self.cmd_breakup))
-            app.add_handler(CommandHandler("fwb", self.cmd_fwb))
+            app.add_handler(CommandHandler("jadipacar", self._queue_wrapper(self.cmd_jadipacar)))
+            app.add_handler(CommandHandler("break", self._queue_wrapper(self.cmd_break)))
+            app.add_handler(CommandHandler("unbreak", self._queue_wrapper(self.cmd_unbreak)))
+            app.add_handler(CommandHandler("breakup", self._queue_wrapper(self.cmd_breakup)))
+            app.add_handler(CommandHandler("fwb", self._queue_wrapper(self.cmd_fwb)))
             
             # Message handler
             app.add_handler(MessageHandler(
                 filters.TEXT & ~filters.COMMAND, 
-                self.handle_message
+                self._queue_wrapper(self.handle_message)
             ))
             
             # Error handler
             app.add_error_handler(self.error_handler)
             
-            logger.info("✅ Telegram handlers registered")
+            logger.info("✅ Telegram handlers registered with queue")
             
         except Exception as e:
             logger.error(f"❌ Error in setup: {e}")
             logger.error(traceback.format_exc())
+    
+    def _queue_wrapper(self, handler_func):
+        """
+        Wrapper untuk memasukkan request ke queue
+        
+        Args:
+            handler_func: Function handler yang akan dijalankan
+            
+        Returns:
+            Wrapped function
+        """
+        async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            if self.request_queue:
+                await self.request_queue.process(update, handler_func, context)
+            else:
+                # Fallback jika queue tidak ada
+                await handler_func(update, context)
+        
+        return wrapped
     
     # ===== START COMMAND =====
     
@@ -347,6 +369,13 @@ class TelegramHandlers:
                 query.from_user.first_name, 
                 role
             )
+            
+            # Create brain untuk user
+            brain = Brain(user_id, role, Config.MEMORY_DB_PATH)
+            await brain.start()
+            
+            # Set brain di bot
+            await self.bot.set_brain(brain)
             
             intro = role_obj.get_intro()
             intro += f"\n\n✨ **Level 1/12** - Ayo ngobrol dan kenali aku! 💕"
@@ -898,6 +927,10 @@ Ketik /start untuk memulai! 🔥
             session = self.sessions[user_id]
             name = session['name']
             
+            # Stop brain jika ada
+            if hasattr(self.bot, 'brain') and self.bot.brain and self.bot.brain.user_id == user_id:
+                await self.bot.brain.stop()
+            
             del self.sessions[user_id]
             
             await query.edit_message_text(
@@ -973,17 +1006,23 @@ Ketik /start untuk memulai! 🔥
                 message
             )
             
-            # Simple response
-            responses = [
-                "*tersenyum* Hmm... iya?",
-                "*memandang* Lanjutkan...",
-                "Aku dengerin kok...",
-                "*mengangguk* Terus?",
-                "Hehe... kamu lucu",
-                "Iya... aku ngerti"
-            ]
-            
-            response = random.choice(responses)
+            # Proses dengan brain jika ada
+            response = ""
+            if hasattr(self.bot, 'brain') and self.bot.brain and self.bot.brain.user_id == user_id:
+                # Gunakan brain untuk generate response
+                brain_response = await self.bot.brain.generate_response(message, session)
+                response = brain_response
+            else:
+                # Simple response
+                responses = [
+                    "*tersenyum* Hmm... iya?",
+                    "*memandang* Lanjutkan...",
+                    "Aku dengerin kok...",
+                    "*mengangguk* Terus?",
+                    "Hehe... kamu lucu",
+                    "Iya... aku ngerti"
+                ]
+                response = random.choice(responses)
             
             await update.message.reply_text(response)
             
