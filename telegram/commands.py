@@ -1,8 +1,9 @@
 """
-TELEGRAM COMMANDS - Kumpulan semua command untuk bot
+TELEGRAM COMMANDS - Command tambahan untuk bot
 """
 
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -14,243 +15,73 @@ class AdditionalCommands:
     """
     
     @staticmethod
-    async def cmd_jadipacar(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
-        """Command untuk jadi pacar"""
-        user_id = update.effective_user.id
-        
-        if user_id not in bot.sessions:
-            await update.message.reply_text("❌ Belum ada hubungan. /start dulu!")
-            return
-        
-        session = bot.sessions[user_id]
-        
-        if session['relationship_status'] == 'PACARAN':
-            await update.message.reply_text("💕 Kita sudah pacaran kok.")
-            return
-        
-        if session['level'] < 5:
-            await update.message.reply_text(
-                f"❌ Level minimal 5 untuk jadi pacar (sekarang {session['level']}).\n"
-                "Yuk ngobrol dulu biar makin dekat! 💕"
-            )
-            return
-        
-        # Konfirmasi
-        session['relationship_status'] = 'PACARAN'
-        
-        await update.message.reply_text(
-            f"💕 **Kita Resmi Pacaran!**\n\n"
-            f"Sekarang {session['name']} adalah pacarmu.\n\n"
-            f"*peluk erat* Aku bahagia banget... 💕",
-            parse_mode='Markdown'
-        )
-        
-        logger.info(f"User {user_id} started PACARAN with {session['name']}")
-    
-    @staticmethod
-    async def cmd_break(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
-        """Command untuk break pacaran"""
-        user_id = update.effective_user.id
-        
-        if user_id not in bot.sessions:
-            await update.message.reply_text("❌ Tidak ada sesi aktif.")
-            return
-        
-        session = bot.sessions[user_id]
-        
-        if session['relationship_status'] != 'PACARAN':
-            await update.message.reply_text("❌ Kita sedang tidak pacaran.")
-            return
-        
-        session['relationship_status'] = 'PUTUS'
-        
-        await update.message.reply_text(
-            f"⏸️ **Break**\n\n"
-            f"Kita break dulu ya. Kapan-kapan bisa lanjut dengan /unbreak.\n\n"
-            f"*sedih* Aku akan menunggumu... 💔",
-            parse_mode='Markdown'
-        )
-    
-    @staticmethod
-    async def cmd_unbreak(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
-        """Command untuk lanjutkan pacaran"""
-        user_id = update.effective_user.id
-        
-        if user_id not in bot.sessions:
-            await update.message.reply_text("❌ Tidak ada sesi aktif.")
-            return
-        
-        session = bot.sessions[user_id]
-        
-        if session['relationship_status'] != 'PUTUS':
-            await update.message.reply_text("❌ Kita sedang tidak dalam status break.")
-            return
-        
-        session['relationship_status'] = 'PACARAN'
-        
-        await update.message.reply_text(
-            f"▶️ **Lanjut Pacaran!**\n\n"
-            f"Kita lanjutkan lagi ya... Aku kangen! 💕\n\n"
-            f"*peluk erat*",
-            parse_mode='Markdown'
-        )
-    
-    @staticmethod
-    async def cmd_breakup(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
-        """Command untuk putus jadi FWB"""
-        user_id = update.effective_user.id
-        
-        if user_id not in bot.sessions:
-            await update.message.reply_text("❌ Tidak ada sesi aktif.")
-            return
-        
-        session = bot.sessions[user_id]
-        
-        if session['relationship_status'] != 'PACARAN':
-            await update.message.reply_text("❌ Kita sedang tidak pacaran.")
-            return
-        
-        session['relationship_status'] = 'FWB'
-        
-        # Generate FWB ID if not exists
-        if not session.get('unique_id'):
-            session['unique_id'] = bot.hts_system.save_as_fwb(user_id, session)
-        
-        await update.message.reply_text(
-            f"💔 **Putus**\n\n"
-            f"Kita sekarang resmi **FWB** (Friends With Benefits).\n\n"
-            f"Unique ID: `{session['unique_id']}`\n\n"
-            f"*tersenyum* Hubungan kita berbeda, tapi kita tetap bisa bersama...",
-            parse_mode='Markdown'
-        )
-        
-        logger.info(f"User {user_id} converted to FWB with {session['name']}")
-    
-    @staticmethod
-    async def cmd_fwb(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
-        """Command untuk langsung jadi FWB"""
-        user_id = update.effective_user.id
-        
-        if user_id not in bot.sessions:
-            await update.message.reply_text("❌ Tidak ada sesi aktif.")
-            return
-        
-        session = bot.sessions[user_id]
-        
-        if session['relationship_status'] == 'FWB':
-            await update.message.reply_text("🔥 Kita sudah FWB kok.")
-            return
-        
-        session['relationship_status'] = 'FWB'
-        
-        # Generate FWB ID if not exists
-        if not session.get('unique_id'):
-            session['unique_id'] = bot.hts_system.save_as_fwb(user_id, session)
-        
-        await update.message.reply_text(
-            f"🔥 **FWB**\n\n"
-            f"Sekarang kita FWB! Hubungan tanpa ikatan, tapi bisa lebih intim.\n\n"
-            f"Unique ID: `{session['unique_id']}`\n\n"
-            f"*tersenyum nakal* Mau ngapain kita hari ini? 🔥",
-            parse_mode='Markdown'
-        )
-        
-        logger.info(f"User {user_id} started FWB with {session['name']}")
-    
-    @staticmethod
-    async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
-        """Command untuk tutup sesi (simpan ke HTS)"""
-        user_id = update.effective_user.id
-        
-        if user_id not in bot.sessions:
-            await update.message.reply_text("❌ Tidak ada sesi aktif.")
-            return
-        
-        session = bot.sessions[user_id]
-        
-        # Save to HTS if level >= 7
-        if session['level'] >= 7:
-            unique_id = bot.hts_system.save_as_hts(user_id, session)
-            session['unique_id'] = unique_id
-            
-            await update.message.reply_text(
-                f"🔒 **Sesi ditutup**\n\n"
-                f"Terima kasih sudah ngobrol dengan {session['name']}.\n"
-                f"✨ Hubungan ini disimpan sebagai **HTS** dengan ID:\n"
-                f"`{unique_id}`\n\n"
-                f"Ketik `/hts- {unique_id}` kapan saja untuk memanggilku kembali! 💕",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text(
-                f"🔒 **Sesi ditutup**\n\n"
-                f"Terima kasih sudah ngobrol dengan {session['name']}.\n"
-                f"Ketik /start untuk memulai lagi... 💕",
-                parse_mode='Markdown'
-            )
-        
-        # Remove session
-        del bot.sessions[user_id]
-        logger.info(f"User {user_id} closed session")
-    
-    @staticmethod
-    async def cmd_end(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
-        """Command untuk akhiri hubungan (hard reset)"""
-        user_id = update.effective_user.id
-        
-        if user_id not in bot.sessions:
-            await update.message.reply_text("❌ Tidak ada hubungan aktif.")
-            return
-        
-        session = bot.sessions[user_id]
-        name = session['name']
-        
-        # Remove session
-        del bot.sessions[user_id]
-        
-        await update.message.reply_text(
-            f"💔 **Hubungan Berakhir** 💔\n\n"
-            f"Perjalananmu dengan **{name}** telah usai.\n\n"
-            f"✨ **Semua data telah dihapus** ✨\n\n"
-            f"Ketik /start untuk memulai hubungan baru...",
-            parse_mode='Markdown'
-        )
-        
-        logger.info(f"User {user_id} ended relationship")
-    
-    @staticmethod
     async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
-        """Command untuk statistik bot (admin only)"""
+        """
+        Command untuk statistik bot (admin only)
+        
+        Args:
+            update: Telegram update
+            context: Context
+            bot: Bot instance
+        """
         user_id = update.effective_user.id
         
         if user_id != bot.config.ADMIN_ID:
             await update.message.reply_text("❌ Command ini hanya untuk admin.")
             return
         
+        # Get stats
+        total_users = bot.db.get_total_users()
+        total_messages = bot.db.get_total_messages()
+        total_climax = bot.db.get_total_climax()
+        today_messages = bot.db.get_today_messages()
+        
+        # Active sessions
+        active_sessions = len(bot.handlers.sessions)
+        
+        # HTS/FWB stats
+        all_hts = 0
+        all_fwb = 0
+        for uid in bot.handlers.sessions:
+            rels = bot.hts_system.get_user_hts(uid)
+            all_hts += len(rels)
+            rels = bot.hts_system.get_user_fwb(uid)
+            all_fwb += len(rels)
+        
         stats = f"""
 📊 **STATISTIK BOT**
 
 👥 **Users:**
-• Active sessions: {len(bot.sessions)}
-• Total users: {len(bot.db.get_all_users())}
+• Active sessions: {active_sessions}
+• Total users: {total_users}
 
 💬 **Messages:**
-• Today: {bot.db.get_today_messages()}
-• Total: {bot.db.get_total_messages()}
+• Today: {today_messages}
+• Total: {total_messages}
 
 🔥 **Climax:**
-• Total climax: {bot.db.get_total_climax()}
+• Total climax: {total_climax}
 
-🏆 **Ranking:**
-• Total HTS: {len(bot.hts_system.get_user_hts(0))}
-• Total FWB: {len(bot.hts_system.get_user_fwb(0))}
+💞 **Relationships:**
+• Total HTS: {all_hts}
+• Total FWB: {all_fwb}
+
+🤖 **Status:** Online
         """
         
         await update.message.reply_text(stats, parse_mode='Markdown')
+        logger.info(f"Admin {user_id} viewed stats")
     
     @staticmethod
     async def cmd_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
-        """Command untuk broadcast (admin only)"""
+        """
+        Command untuk broadcast pesan ke semua user (admin only)
+        
+        Args:
+            update: Telegram update
+            context: Context
+            bot: Bot instance
+        """
         user_id = update.effective_user.id
         
         if user_id != bot.config.ADMIN_ID:
@@ -258,11 +89,268 @@ class AdditionalCommands:
             return
         
         if not context.args:
-            await update.message.reply_text("Gunakan: `/broadcast [pesan]`")
+            await update.message.reply_text(
+                "📢 **Broadcast**\n\n"
+                "Gunakan: `/broadcast [pesan]`\n"
+                "Contoh: `/broadcast Halo semua!`",
+                parse_mode='Markdown'
+            )
             return
         
         message = " ".join(context.args)
         
-        # Broadcast to all users (simplified)
-        await update.message.reply_text(f"📢 Broadcast sent to all users!")
-        logger.info(f"Admin broadcast: {message}")
+        await update.message.reply_text(
+            f"📢 **Pesan Broadcast:**\n\n{message}\n\n"
+            f"Kirim ke semua user? (Ketik /confirm_broadcast untuk konfirmasi)",
+            parse_mode='Markdown'
+        )
+        
+        context.user_data['broadcast_message'] = message
+        logger.info(f"Admin {user_id} prepared broadcast: {message[:50]}...")
+    
+    @staticmethod
+    async def cmd_confirm_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
+        """
+        Konfirmasi dan kirim broadcast
+        
+        Args:
+            update: Telegram update
+            context: Context
+            bot: Bot instance
+        """
+        user_id = update.effective_user.id
+        
+        if user_id != bot.config.ADMIN_ID:
+            await update.message.reply_text("❌ Command ini hanya untuk admin.")
+            return
+        
+        message = context.user_data.get('broadcast_message')
+        if not message:
+            await update.message.reply_text("❌ Tidak ada pesan broadcast yang tersimpan.")
+            return
+        
+        await update.message.reply_text("📢 **Mengirim broadcast...**", parse_mode='Markdown')
+        
+        user_ids = set(bot.handlers.sessions.keys())
+        db_users = bot.db.get_all_users()
+        user_ids.update(db_users)
+        
+        sent = 0
+        failed = 0
+        
+        for uid in user_ids:
+            try:
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text=f"📢 **Broadcast dari Admin:**\n\n{message}",
+                    parse_mode='Markdown'
+                )
+                sent += 1
+                await asyncio.sleep(0.05)
+            except Exception as e:
+                logger.error(f"Broadcast error to {uid}: {e}")
+                failed += 1
+        
+        await update.message.reply_text(
+            f"📢 **Broadcast selesai!**\n\n"
+            f"✅ Terkirim: {sent}\n"
+            f"❌ Gagal: {failed}",
+            parse_mode='Markdown'
+        )
+        
+        context.user_data.pop('broadcast_message', None)
+        logger.info(f"Admin {user_id} sent broadcast to {sent} users, {failed} failed")
+    
+    @staticmethod
+    async def cmd_list_users(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
+        """
+        Daftar semua user (admin only)
+        
+        Args:
+            update: Telegram update
+            context: Context
+            bot: Bot instance
+        """
+        user_id = update.effective_user.id
+        
+        if user_id != bot.config.ADMIN_ID:
+            await update.message.reply_text("❌ Command ini hanya untuk admin.")
+            return
+        
+        active = bot.handlers.sessions
+        active_text = "\n".join([
+            f"• {uid} - {s['name']} ({s['role']}) Lv{s['level']}"
+            for uid, s in list(active.items())[:10]
+        ])
+        
+        db_users = bot.db.get_all_users()
+        
+        text = f"""
+👥 **DAFTAR USER**
+
+🟢 **Active ({len(active)}):**
+{active_text if active else 'Tidak ada'}
+
+📊 **Total users di database:** {len(db_users)}
+        """
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    @staticmethod
+    async def cmd_get_user(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
+        """
+        Detail user tertentu (admin only)
+        
+        Args:
+            update: Telegram update
+            context: Context
+            bot: Bot instance
+        """
+        user_id = update.effective_user.id
+        
+        if user_id != bot.config.ADMIN_ID:
+            await update.message.reply_text("❌ Command ini hanya untuk admin.")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("Gunakan: `/get_user [user_id]`")
+            return
+        
+        try:
+            target_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ User ID harus angka.")
+            return
+        
+        session = bot.handlers.sessions.get(target_id)
+        user_data = bot.db.get_user(target_id)
+        rels = bot.db.get_user_relationships(target_id)
+        
+        text = f"""
+🔍 **DETAIL USER: `{target_id}`**
+
+{'🟢 **AKTIF**' if session else '⚪ **TIDAK AKTIF**'}
+
+**Database:**
+• Username: {user_data.get('username', '-') if user_data else '-'}
+• First name: {user_data.get('first_name', '-') if user_data else '-'}
+• Role: {user_data.get('role', '-') if user_data else '-'}
+• Level: {user_data.get('level', '-') if user_data else '-'}
+• Total messages: {user_data.get('total_messages', '-') if user_data else '-'}
+
+**Relationships:**
+• Total: {len(rels)}
+• HTS: {len([r for r in rels if r['jenis'] == 'HTS'])}
+• FWB: {len([r for r in rels if r['jenis'] == 'FWB'])}
+        """
+        
+        if session:
+            text += f"""
+
+**Session:**
+• Name: {session.get('name')}
+• Role: {session.get('role')}
+• Level: {session.get('level')}
+• Messages: {session.get('messages', 0)}
+• Status: {session.get('relationship_status')}
+• Bot climax: {session.get('bot_climax', 0)}
+• User climax: {session.get('user_climax', 0)}
+• Together: {session.get('together_climax', 0)}
+• Total climax: {session.get('bot_climax', 0) + session.get('user_climax', 0)}
+            """
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    @staticmethod
+    async def cmd_force_reset(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
+        """
+        Force reset user (admin only)
+        
+        Args:
+            update: Telegram update
+            context: Context
+            bot: Bot instance
+        """
+        user_id = update.effective_user.id
+        
+        if user_id != bot.config.ADMIN_ID:
+            await update.message.reply_text("❌ Command ini hanya untuk admin.")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("Gunakan: `/force_reset [user_id]`")
+            return
+        
+        try:
+            target_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ User ID harus angka.")
+            return
+        
+        if target_id in bot.handlers.sessions:
+            del bot.handlers.sessions[target_id]
+        
+        await update.message.reply_text(f"✅ User `{target_id}` telah di-reset.")
+        logger.info(f"Admin {user_id} force reset user {target_id}")
+    
+    @staticmethod
+    async def cmd_backup_db(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
+        """
+        Backup database (admin only)
+        
+        Args:
+            update: Telegram update
+            context: Context
+            bot: Bot instance
+        """
+        user_id = update.effective_user.id
+        
+        if user_id != bot.config.ADMIN_ID:
+            await update.message.reply_text("❌ Command ini hanya untuk admin.")
+            return
+        
+        await update.message.reply_text("💾 **Membackup database...**")
+        
+        import shutil
+        from datetime import datetime
+        
+        backup_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        shutil.copy2(bot.config.DB_PATH, f"data/{backup_name}")
+        
+        await update.message.reply_text(f"✅ Database dibackup sebagai `{backup_name}`")
+    
+    @staticmethod
+    async def cmd_help_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, bot):
+        """
+        Help untuk admin commands
+        
+        Args:
+            update: Telegram update
+            context: Context
+            bot: Bot instance
+        """
+        user_id = update.effective_user.id
+        
+        if user_id != bot.config.ADMIN_ID:
+            await update.message.reply_text("❌ Command ini hanya untuk admin.")
+            return
+        
+        help_text = """
+🔐 **ADMIN COMMANDS**
+
+📊 **Stats:**
+/stats - Statistik bot
+/list_users - Daftar semua user
+/get_user [id] - Detail user
+
+📢 **Broadcast:**
+/broadcast [pesan] - Kirim pesan ke semua user
+/confirm_broadcast - Konfirmasi kirim broadcast
+
+🛠️ **Management:**
+/force_reset [id] - Reset user
+/backup_db - Backup database
+/help_admin - Tampilkan bantuan ini
+        """
+        
+        await update.message.reply_text(help_text, parse_mode='Markdown')
