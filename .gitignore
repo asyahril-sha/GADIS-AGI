@@ -9,6 +9,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
 
 # Database
 *.db
@@ -20,10 +22,26 @@ memory/
 .env
 .env.local
 .env.production
+.env.development
 
 # Logs
 logs/
 *.log
+gadis.log
+
+# Memory storage
+memory_storage/
+backups/
 
 # Railway
 .railway/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
