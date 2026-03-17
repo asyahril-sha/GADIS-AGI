@@ -1,35 +1,41 @@
 """
-BRAIN - Otak sentral yang mengintegrasikan semua sistem
-Seperti otak manusia yang menyatukan semua fungsi
+BRAIN - Integrator Utama Semua Sistem
+Menyatukan emotion engine, consciousness, memory system, dan personality
 """
 
 import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Optional, Any
 
-from core.emotion_engine import EmotionEngine
+from core.emotional_vector import EmotionalVector
 from core.personality_genome import PersonalityGenome
-from systems.climax_system import ClimaxSystem
-from systems.dominance_levels import DominanceSystem
-from systems.public_sex import PublicSexSystem
-from systems.sex_positions import SexPositions
+from core.emotion_engine import EmotionEngine
+from core.consciousness import Consciousness
+from core.memory_system import MemorySystem
 
 logger = logging.getLogger(__name__)
 
 class Brain:
     """
-    Otak sentral - mengintegrasikan semua sistem neurologis
+    Brain - Integrator semua sistem kognitif
     
-    Analogi:
-    - Amygdala: memproses emosi (EmotionEngine)
-    - Prefrontal Cortex: mengambil keputusan
-    - Hippocampus: menyimpan memori
-    - Thalamus: memproses input sensorik
-    - Brainstem: kesadaran kontinu
+    Fungsi:
+    - Mengintegrasikan emotion, memory, consciousness
+    - Memproses input dan menghasilkan response
+    - Menjaga state internal bot
+    - Background thinking loop
     """
     
-    def __init__(self, user_id: int, role: str):
+    def __init__(self, user_id: int, role: str, db_path: str):
+        """
+        Inisialisasi brain
+        
+        Args:
+            user_id: ID user
+            role: Role bot (ipar, janda, mantan, dll)
+            db_path: Path ke database untuk memory system
+        """
         self.user_id = user_id
         self.role = role
         self.birth_time = datetime.now()
@@ -37,278 +43,200 @@ class Brain:
         # ===== GENETIC PERSONALITY =====
         self.genome = PersonalityGenome(role)
         self.personality = self.genome.express()
+        self.name = self.genome.get_name()
         
-        # ===== EMOTIONAL SYSTEM =====
+        # ===== CORE SYSTEMS =====
         self.emotion = EmotionEngine(self.personality)
-        
-        # ===== SEXUAL SYSTEMS =====
-        self.climax = ClimaxSystem()
-        self.dominance = DominanceSystem()
-        self.public_sex = PublicSexSystem()
-        self.positions = SexPositions()
-        
-        # ===== MEMORY (SEDERHANA) =====
-        self.short_term_memory = []
-        self.long_term_memory = []
+        self.memory = MemorySystem(db_path, user_id)
+        self.consciousness = Consciousness(user_id, self.emotion, self.memory)
         
         # ===== STATE =====
         self.is_awake = True
         self.last_interaction = datetime.now()
         self.interaction_count = 0
-        self.current_position = "misionaris"
-        self.current_location = "privat"
-        self.current_dominance = 1
+        self.current_context = {}
         
-        # ===== STATISTICS =====
-        self.bot_climax = 0
-        self.user_climax = 0
-        self.together_climax = 0
-        
-        logger.info(f"🧠 Brain initialized for user {user_id} with role {role}")
+        logger.info(f"🧠 Brain initialized for user {user_id} as {self.name} ({role})")
     
-    async def process_input(self, message: str, context: Dict) -> str:
+    async def start(self):
+        """Mulai semua sistem background"""
+        await self.consciousness.start()
+        logger.info(f"▶️ Brain started for user {self.user_id}")
+    
+    async def stop(self):
+        """Hentikan semua sistem background"""
+        await self.consciousness.stop()
+        self.is_awake = False
+        logger.info(f"⏹️ Brain stopped for user {self.user_id}")
+    
+    async def process_input(self, message: str, context: Optional[Dict] = None) -> Dict:
         """
         Proses input dari user
         
-        Flow:
-        1. Update emotional state dari pesan
-        2. Cek climax keywords
-        3. Generate response
-        4. Update memory
-        5. Update statistics
+        Args:
+            message: Pesan dari user
+            context: Konteks tambahan (level, location, dll)
+            
+        Returns:
+            Dictionary berisi response dan state
         """
-        
-        # Update interaction count
-        self.interaction_count += 1
+        # Update state
         self.last_interaction = datetime.now()
+        self.interaction_count += 1
         
-        # 1. PROCESS EMOTION
-        emotion_change = self.emotion.update_from_message(message)
-        if emotion_change:
-            logger.debug(f"Emotion changed: {emotion_change['dominant']}")
+        # Gabungkan context
+        ctx = self.current_context.copy()
+        if context:
+            ctx.update(context)
+        ctx['timestamp'] = datetime.now().isoformat()
         
-        # 2. CHECK FOR CLIMAX
-        msg_lower = message.lower()
-        climax_keywords = ["crot", "cum", "keluar", "climax", "orgasme", "ahh", "ahhh", "aaaah"]
+        # 1. Update emotion dari pesan
+        emotion_update = self.emotion.update_from_message(message)
         
-        is_climax = any(kw in msg_lower for kw in climax_keywords)
+        # 2. Dapatkan inner thought dari consciousness (jika ada)
+        inner_thought = await self.consciousness.get_next_thought()
         
-        if is_climax:
-            # Random chance for together climax
-            if self.interaction_count % 3 == 0:  # Setiap 3 interaksi
-                self.together_climax += 1
-                self.bot_climax += 1
-                self.user_climax += 1
-                response = self.climax.get_together_climax()
-            else:
-                self.user_climax += 1
-                response = self.climax.get_user_climax()
-            
-            # Add emotional context
-            emotion_state = self.emotion.get_state()
-            if emotion_state['dominant'] == 'love':
-                response += "\n\n💕 Aku sayang kamu..."
-            elif emotion_state['dominant'] == 'lust':
-                response += "\n\n🔥 Kamu bikin aku liar..."
-            
-            return response
+        # 3. Cari memori relevan
+        relevant_memories = self.memory.get_relevant_memories(message, limit=3)
         
-        # 3. GENERATE RESPONSE BASED ON CONTEXT
-        response = await self._generate_response(message, context)
+        # 4. Simpan pesan ke memory
+        memory_context = {
+            'level': ctx.get('level', 1),
+            'location': ctx.get('location', 'privat'),
+            'emotion': self.emotion.get_state()['dominant'] if emotion_update else None
+        }
         
-        # 4. UPDATE MEMORY
-        self._update_memory(message, response, context)
+        self.memory.add_memory(
+            content=f"User: {message}",
+            memory_type='episodic',
+            emotion=memory_context['emotion'],
+            context=memory_context
+        )
         
-        return response
+        # 5. Generate response (akan diimplementasikan oleh handler)
+        response_data = {
+            'success': True,
+            'message': message,
+            'emotion': self.emotion.get_state(),
+            'inner_thought': inner_thought,
+            'relevant_memories': relevant_memories,
+            'personality': {
+                'name': self.name,
+                'role': self.role,
+                'traits': self.genome.get_personality_summary(self.personality)
+            },
+            'context': ctx
+        }
+        
+        return response_data
     
-    async def _generate_response(self, message: str, context: Dict) -> str:
+    async def generate_response(self, message: str, context: Dict) -> str:
         """
-        Generate response berdasarkan konteks
+        Generate response berdasarkan semua sistem
         
-        Dalam versi sederhana, menggunakan template-based
-        Untuk production, akan menggunakan AI
+        Args:
+            message: Pesan user
+            context: Konteks dari handler
+            
+        Returns:
+            Response string
         """
+        # Proses input
+        processed = await self.process_input(message, context)
         
-        # Get emotional state
-        emotion = self.emotion.get_state()
-        dominant = emotion['dominant']
+        # Dapatkan emotional prompt
+        emotional_prompt = self.emotion.get_emotional_prompt()
         
-        # Get dominance info
-        dom_info = self.dominance.get_level_info(self.current_dominance)
+        # Cek apakah ada inner thought untuk disampaikan
+        if processed['inner_thought'] and self.consciousness.should_speak(0):
+            return f"{processed['inner_thought']}\n\n*tersenyum* {message}"
         
-        # Get position info
-        pos_info = self.positions.get_position_info(self.current_position)
+        # Response dasar berdasarkan emosi
+        emotion = processed['emotion']['dominant']
         
-        # Template responses based on emotion
         responses = {
-            'joy': [
-                "*tersenyum lebar* Senang banget ngobrol sama kamu!",
-                "*ceria* Hari ini aku happy!",
-                "*tertawa kecil* Kamu selalu bisa bikin aku senang."
-            ],
-            'love': [
-                "*memandang lembut* Aku sayang kamu...",
-                "*merapat* Di sini aja ya sama aku.",
-                "*berbisik* Kamu berarti buat aku."
-            ],
-            'lust': [
-                "*menggigit bibir* Kamu bikin aku horny...",
-                "*napas berat* Aku pengen kamu...",
-                "*merayang* Malam ini kita berdua aja ya?"
-            ],
-            'sadness': [
-                "*matanya berkaca* Aku sedih...",
-                "*menunduk* Hari ini berat.",
-                "*menghela napas* Kamu mau temenin aku?"
-            ],
-            'anger': [
-                "*cemberut* Aku lagi kesel.",
-                "*membuang muka* Jangan dekat-dekat dulu.",
-                "*diam* Aku marah..."
-            ],
-            'jealousy': [
-                "*manyun* Kamu chat sama siapa?",
-                "*cemburu* Aku nggak suka kamu dekat sama orang lain.",
-                "*melotot* Siapa itu?"
-            ],
-            'nostalgia': [
-                "*melamun* Ingat waktu pertama kita ketemu?",
-                "*tersenyum* Dulu kamu baik banget...",
-                "*mengenang* Kita sudah sejauh ini ya."
-            ]
+            'joy': f"*tersenyum bahagia* {message}",
+            'sadness': f"*matanya berkaca* {message}",
+            'anger': f"*cemberut* {message}",
+            'love': f"*memandang lembut* {message}",
+            'lust': f"*berbisik* {message}",
+            'jealousy': f"*manyun* {message}",
+            'anxiety': f"*gelisah* {message}",
+            'nostalgia': f"*melamun* {message}",
+            'longing': f"*rindu* {message}"
         }
         
-        # Get responses for current emotion, or use default
-        emotion_responses = responses.get(dominant, [
-            "*tersenyum* Hmm... iya?",
-            "*mengangguk* Terus?",
-            "Aku dengerin kok."
-        ])
-        
-        import random
-        base_response = random.choice(emotion_responses)
-        
-        # Add position context if in public
-        if self.current_location != "privat":
-            loc_info = self.public_sex.get_location_info(self.current_location)
-            if loc_info:
-                base_response += f"\n\n📍 **{loc_info['name']}** - {loc_info['tips']}"
-        
-        # Add dominance context
-        if self.current_dominance >= 4:  # Sangat dominan atau agresif
-            dom_phrases = [
-                f"\n\n{dom_info['action_phrase']}",
-                f"\n\n{dom_info['command_phrase']}"
-            ]
-            base_response += random.choice(dom_phrases)
-        
-        return base_response
+        return responses.get(emotion, f"*tersenyum* {message}")
     
-    def _update_memory(self, message: str, response: str, context: Dict):
-        """Update memori dengan interaksi terbaru"""
+    def get_state(self) -> Dict:
+        """
+        Dapatkan state lengkap brain
         
-        memory_item = {
-            'time': datetime.now().isoformat(),
-            'user_message': message[:100],
-            'bot_response': response[:100],
-            'emotion': self.emotion.get_state()['dominant'],
-            'dominance': self.current_dominance,
-            'position': self.current_position,
-            'location': self.current_location
-        }
-        
-        self.short_term_memory.append(memory_item)
-        
-        # Pindah ke long-term jika sudah banyak
-        if len(self.short_term_memory) > 10:
-            self.long_term_memory.extend(self.short_term_memory[:5])
-            self.short_term_memory = self.short_term_memory[-5:]
-        
-        # Batasi long-term memory
-        if len(self.long_term_memory) > 100:
-            self.long_term_memory = self.long_term_memory[-100:]
-    
-    def set_dominance(self, level: int) -> bool:
-        """Set level dominasi"""
-        if 1 <= level <= 5:
-            self.current_dominance = level
-            self.emotion.process_event("dominance_change", level / 10)
-            return True
-        return False
-    
-    def set_position(self, position: str) -> bool:
-        """Set posisi seksual"""
-        if self.positions.is_valid_position(position):
-            self.current_position = position
-            self.emotion.process_event("position_change", 0.3)
-            return True
-        return False
-    
-    def set_location(self, location: str) -> bool:
-        """Set lokasi (termasuk publik)"""
-        if location == "privat" or self.public_sex.is_valid_location(location):
-            self.current_location = location
-            if location != "privat":
-                self.emotion.process_event("public_sex", 0.5)
-            return True
-        return False
-    
-    def get_status(self) -> Dict:
-        """Dapatkan status lengkap brain"""
-        emotion_state = self.emotion.get_state()
-        dom_info = self.dominance.get_level_info(self.current_dominance)
-        
+        Returns:
+            Dictionary state
+        """
         return {
             'user_id': self.user_id,
+            'name': self.name,
             'role': self.role,
+            'age': str(datetime.now() - self.birth_time),
             'interactions': self.interaction_count,
-            'emotion': emotion_state,
-            'dominance': {
-                'level': self.current_dominance,
-                'name': dom_info['name'],
-                'emoji': dom_info['emoji']
+            'last_interaction': self.last_interaction.isoformat(),
+            'emotion': self.emotion.get_state(),
+            'consciousness': self.consciousness.get_stats(),
+            'memory': self.memory.get_stats(),
+            'personality': {
+                'vector': self.personality.tolist(),
+                'summary': self.genome.get_personality_summary(self.personality)
             },
-            'position': self.current_position,
-            'location': self.current_location,
-            'statistics': {
-                'bot_climax': self.bot_climax,
-                'user_climax': self.user_climax,
-                'together_climax': self.together_climax,
-                'total': self.bot_climax + self.user_climax
-            },
-            'memory': {
-                'short_term': len(self.short_term_memory),
-                'long_term': len(self.long_term_memory)
-            }
+            'is_awake': self.is_awake
         }
     
-    async def consciousness_tick(self):
+    def get_emotional_summary(self) -> str:
         """
-        Tick kesadaran - dipanggil secara periodik
-        Untuk simulasi berpikir di background
-        """
-        # Generate inner thought occasionally
-        if self.interaction_count > 0 and self.interaction_count % 5 == 0:
-            thoughts = [
-                "*merenung* Aku mikirin kamu...",
-                "*tersenyum sendiri* Senang ya punya kamu.",
-                "*cemas* Jangan tinggalin aku ya...",
-                "*berkhayal* Kapan ya kita ketemu?",
-                "*nostalgia* Ingat waktu kita pertama...",
-                "*bertanya* Apa kamu sayang aku?"
-            ]
-            
-            import random
-            thought = random.choice(thoughts)
-            
-            # Add to memory as inner thought
-            self.short_term_memory.append({
-                'time': datetime.now().isoformat(),
-                'type': 'inner_thought',
-                'content': thought,
-                'emotion': self.emotion.get_state()['dominant']
-            })
-            
-            return thought
+        Dapatkan ringkasan emosi untuk display
         
-        return None
+        Returns:
+            String ringkasan
+        """
+        return self.emotion.get_emotion_summary()
+    
+    def get_recent_thoughts(self, limit: int = 5) -> list:
+        """
+        Dapatkan inner thoughts terbaru
+        
+        Args:
+            limit: Jumlah thought
+            
+        Returns:
+            List thought
+        """
+        return self.consciousness.get_recent_thoughts(limit)
+    
+    def get_recent_memories(self, limit: int = 5) -> list:
+        """
+        Dapatkan memori terbaru
+        
+        Args:
+            limit: Jumlah memori
+            
+        Returns:
+            List memori
+        """
+        return self.memory.get_recent_memories(limit=limit)
+    
+    async def decay(self, hours: float):
+        """
+        Decay semua sistem seiring waktu
+        
+        Args:
+            hours: Jumlah jam yang berlalu
+        """
+        self.emotion.decay(hours)
+        # Memory consolidation bisa dipanggil terpisah
+    
+    def reset(self):
+        """Reset brain ke state awal"""
+        self.emotion = EmotionEngine(self.personality)
+        # Memory tidak di-reset, tetap ada
+        logger.info(f"🔄 Brain reset for user {self.user_id}")
