@@ -1,3 +1,7 @@
+# Build tools
+wheel
+setuptools
+
 # Telegram Bot
 python-telegram-bot==20.7
 
@@ -12,4 +16,6 @@ gunicorn==21.2.0
 # Utilities
 python-dotenv==1.0.0
 requests==2.31.0
-numpy==1.24.0
+
+# NumPy - versi stabil
+numpy==1.23.5
