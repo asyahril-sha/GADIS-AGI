@@ -1,6 +1,6 @@
 """
 TELEGRAM HANDLERS - Menangani semua interaksi dengan user
-Versi dengan Request Queue integration dan semua bug fixes
+Versi Simple dengan debug logging
 """
 
 import logging
@@ -20,7 +20,6 @@ from config import Config
 from database import Database
 from systems.hts_fwb_system import HTSFWBSystem, RankingSystem
 from systems.role_archetypes import RoleFactory
-from core.brain import Brain
 
 # State untuk ConversationHandler
 SELECTING_ROLE = 0
@@ -31,16 +30,10 @@ logger = logging.getLogger(__name__)
 
 class TelegramHandlers:
     """
-    Handler untuk semua interaksi Telegram
+    Handler untuk semua interaksi Telegram - Simple Version
     """
     
     def __init__(self, bot):
-        """
-        Inisialisasi handlers
-        
-        Args:
-            bot: Bot instance
-        """
         self.bot = bot
         self.config = Config
         self.db = Database(Config.DB_PATH)
@@ -50,54 +43,48 @@ class TelegramHandlers:
         # User sessions
         self.sessions = {}
         
-        # Request queue dari bot
-        self.request_queue = bot.request_queue if hasattr(bot, 'request_queue') else None
-        
         logger.info("✅ TelegramHandlers initialized")
     
     async def setup(self, app: Application):
-        """
-        Setup semua handlers dengan queue wrapper
-        
-        Args:
-            app: Telegram Application instance
-        """
+        """Setup semua handlers"""
         try:
+            logger.info("🔧 Setting up handlers...")
+            
             # ===== CONVERSATION HANDLERS =====
             
             # Start conversation
             start_conv = ConversationHandler(
-                entry_points=[CommandHandler('start', self._queue_wrapper(self.cmd_start))],
+                entry_points=[CommandHandler('start', self.cmd_start)],
                 states={
                     SELECTING_ROLE: [
-                        CallbackQueryHandler(self._queue_wrapper(self.role_callback), pattern='^role_'),
+                        CallbackQueryHandler(self.role_callback, pattern='^role_'),
                     ],
                 },
-                fallbacks=[CommandHandler('cancel', self._queue_wrapper(self.cmd_cancel))],
+                fallbacks=[CommandHandler('cancel', self.cmd_cancel)],
                 name="start_conversation"
             )
             
             # Close conversation
             close_conv = ConversationHandler(
-                entry_points=[CommandHandler('close', self._queue_wrapper(self.cmd_close))],
+                entry_points=[CommandHandler('close', self.cmd_close)],
                 states={
                     CONFIRM_CLOSE: [
-                        CallbackQueryHandler(self._queue_wrapper(self.close_callback), pattern='^close_'),
+                        CallbackQueryHandler(self.close_callback, pattern='^close_'),
                     ],
                 },
-                fallbacks=[CommandHandler('cancel', self._queue_wrapper(self.cmd_cancel))],
+                fallbacks=[CommandHandler('cancel', self.cmd_cancel)],
                 name="close_conversation"
             )
             
             # End conversation
             end_conv = ConversationHandler(
-                entry_points=[CommandHandler('end', self._queue_wrapper(self.cmd_end))],
+                entry_points=[CommandHandler('end', self.cmd_end)],
                 states={
                     CONFIRM_END: [
-                        CallbackQueryHandler(self._queue_wrapper(self.end_callback), pattern='^end_'),
+                        CallbackQueryHandler(self.end_callback, pattern='^end_'),
                     ],
                 },
-                fallbacks=[CommandHandler('cancel', self._queue_wrapper(self.cmd_cancel))],
+                fallbacks=[CommandHandler('cancel', self.cmd_cancel)],
                 name="end_conversation"
             )
             
@@ -107,69 +94,49 @@ class TelegramHandlers:
             app.add_handler(end_conv)
             
             # ===== COMMAND HANDLERS =====
-            app.add_handler(CommandHandler("status", self._queue_wrapper(self.cmd_status)))
-            app.add_handler(CommandHandler("help", self._queue_wrapper(self.cmd_help)))
+            app.add_handler(CommandHandler("status", self.cmd_status))
+            app.add_handler(CommandHandler("help", self.cmd_help))
             
             # HTS/FWB commands
-            app.add_handler(CommandHandler("htslist", self._queue_wrapper(self.cmd_htslist)))
-            app.add_handler(CommandHandler("fwblist", self._queue_wrapper(self.cmd_fwblist)))
-            app.add_handler(CommandHandler("tophts", self._queue_wrapper(self.cmd_tophts)))
+            app.add_handler(CommandHandler("htslist", self.cmd_htslist))
+            app.add_handler(CommandHandler("fwblist", self.cmd_fwblist))
+            app.add_handler(CommandHandler("tophts", self.cmd_tophts))
             
             # Call handlers for specific IDs
             app.add_handler(MessageHandler(
-                filters.Regex(r'^/hts-'), self._queue_wrapper(self.cmd_hts_call)
+                filters.Regex(r'^/hts-'), self.cmd_hts_call
             ))
             app.add_handler(MessageHandler(
-                filters.Regex(r'^/fwb-'), self._queue_wrapper(self.cmd_fwb_call)
+                filters.Regex(r'^/fwb-'), self.cmd_fwb_call
             ))
             
             # Relationship commands
-            app.add_handler(CommandHandler("jadipacar", self._queue_wrapper(self.cmd_jadipacar)))
-            app.add_handler(CommandHandler("break", self._queue_wrapper(self.cmd_break)))
-            app.add_handler(CommandHandler("unbreak", self._queue_wrapper(self.cmd_unbreak)))
-            app.add_handler(CommandHandler("breakup", self._queue_wrapper(self.cmd_breakup)))
-            app.add_handler(CommandHandler("fwb", self._queue_wrapper(self.cmd_fwb)))
+            app.add_handler(CommandHandler("jadipacar", self.cmd_jadipacar))
+            app.add_handler(CommandHandler("break", self.cmd_break))
+            app.add_handler(CommandHandler("unbreak", self.cmd_unbreak))
+            app.add_handler(CommandHandler("breakup", self.cmd_breakup))
+            app.add_handler(CommandHandler("fwb", self.cmd_fwb))
             
             # Message handler
             app.add_handler(MessageHandler(
                 filters.TEXT & ~filters.COMMAND, 
-                self._queue_wrapper(self.handle_message)
+                self.handle_message
             ))
             
-            # Error handler
-            app.add_error_handler(self.error_handler)
-            
-            logger.info("✅ Telegram handlers registered with queue")
+            logger.info("✅ Telegram handlers registered")
             
         except Exception as e:
             logger.error(f"❌ Error in setup: {e}")
             logger.error(traceback.format_exc())
-    
-    def _queue_wrapper(self, handler_func):
-        """
-        Wrapper untuk memasukkan request ke queue
-        
-        Args:
-            handler_func: Function handler yang akan dijalankan
-            
-        Returns:
-            Wrapped function
-        """
-        async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            if self.request_queue:
-                await self.request_queue.process(update, handler_func, context)
-            else:
-                # Fallback jika queue tidak ada
-                await handler_func(update, context)
-        
-        return wrapped
     
     # ===== START COMMAND =====
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
         try:
-            logger.info("🔥 CMD_START DIPANGGIL")
+            logger.info("🔥🔥🔥 CMD_START DIPANGGIL!")
+            logger.info(f"Update: {update}")
+            logger.info(f"User: {update.effective_user}")
             
             user = update.effective_user
             user_id = user.id
@@ -177,19 +144,16 @@ class TelegramHandlers:
             
             logger.info(f"▶️ /start from {username} (ID: {user_id})")
             
-            # KIRIM PESAN TEST - UNTUK DEBUG
-            await update.message.reply_text("✅ Bot menerima perintah /start. Memproses...")
-            
             # Save user ke database
             try:
                 self.db.save_user(user_id, username, user.first_name, "none")
-                logger.info(f"✅ User saved to database")
+                logger.info("✅ User saved to database")
             except Exception as e:
                 logger.error(f"❌ Database error: {e}")
-                await update.message.reply_text(f"⚠️ Database error: {str(e)}")
             
             # Cek apakah sudah ada session aktif
             if user_id in self.sessions:
+                logger.info(f"User {user_id} already has active session")
                 await update.message.reply_text(
                     "💕 Kamu sudah memiliki sesi aktif. Ketik /status untuk melihat status."
                 )
@@ -198,12 +162,13 @@ class TelegramHandlers:
             # Cek apakah ada session di database
             try:
                 rels = self.db.get_user_relationships(user_id)
-                logger.info(f"📊 Found {len(rels)} relationships")
+                logger.info(f"📊 Found {len(rels)} relationships in DB")
             except Exception as e:
                 logger.error(f"❌ Error getting relationships: {e}")
                 rels = []
             
             if rels:
+                logger.info("Showing load/new menu")
                 keyboard = [
                     [InlineKeyboardButton("📂 Load Hubungan", callback_data="load_relationship")],
                     [InlineKeyboardButton("🆕 Mulai Baru", callback_data="new_relationship")],
@@ -219,7 +184,7 @@ class TelegramHandlers:
                 return SELECTING_ROLE
             
             # Tampilkan menu role
-            logger.info("🎯 Menampilkan menu role")
+            logger.info("🎯 Showing role menu")
             
             keyboard = [
                 [InlineKeyboardButton("👨‍👩‍👧‍👦 Ipar", callback_data="role_ipar")],
@@ -234,31 +199,23 @@ class TelegramHandlers:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await update.message.reply_text(
+            sent_message = await update.message.reply_text(
                 "✨ **GADIS AGI ULTIMATE V3.0** ✨\n\n"
-                "Pilih role untuk memulai petualanganmu:\n\n"
-                "Setiap role punya karakter dan cerita berbeda!",
+                "Pilih role untuk memulai petualanganmu:",
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
             
-            logger.info("✅ Menu role berhasil dikirim")
+            logger.info(f"✅ Menu role sent: {sent_message.message_id}")
             return SELECTING_ROLE
             
         except Exception as e:
-            error_msg = f"❌ Error di cmd_start: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"❌ Error in cmd_start: {e}")
             logger.error(traceback.format_exc())
-            
-            try:
-                await update.message.reply_text(
-                    f"⚠️ Terjadi error: {str(e)}\n\n"
-                    "Silakan coba lagi atau hubungi admin."
-                )
-            except:
-                pass
-            
+            await update.message.reply_text(f"⚠️ Error: {str(e)}")
             return SELECTING_ROLE
+    
+    # ===== ROLE CALLBACK =====
     
     async def role_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle role selection"""
@@ -276,7 +233,6 @@ class TelegramHandlers:
                     rels = self.db.get_user_relationships(user_id)
                     if rels:
                         rel = rels[0]
-                        
                         self.sessions[user_id] = {
                             'name': rel['bot_name'],
                             'role': rel['role'],
@@ -293,10 +249,10 @@ class TelegramHandlers:
                         await query.edit_message_text(
                             f"📂 **Hubungan dimuat!**\n\n"
                             f"{rel['bot_name']} ({rel['role']}) - Level {rel['level']}\n"
-                            f"Status: {rel['jenis']}\n\n"
                             f"Lanjutkan ngobrol ya... 💕",
                             parse_mode='Markdown'
                         )
+                        logger.info(f"✅ Relationship loaded for user {user_id}")
                     else:
                         await query.edit_message_text("❌ Tidak ada hubungan tersimpan.")
                     
@@ -336,11 +292,8 @@ class TelegramHandlers:
                 await self._create_relationship(user_id, role, query)
                 return ConversationHandler.END
             
-            return ConversationHandler.END
-            
         except Exception as e:
             logger.error(f"❌ Error in role_callback: {e}")
-            logger.error(traceback.format_exc())
             await query.edit_message_text(f"❌ Error: {str(e)}")
             return ConversationHandler.END
     
@@ -363,30 +316,17 @@ class TelegramHandlers:
                 'last_active': datetime.now().isoformat()
             }
             
-            self.db.save_user(
-                user_id, 
-                query.from_user.username, 
-                query.from_user.first_name, 
-                role
-            )
-            
-            # Create brain untuk user
-            brain = Brain(user_id, role, Config.MEMORY_DB_PATH)
-            await brain.start()
-            
-            # Set brain di bot
-            await self.bot.set_brain(brain)
+            self.db.save_user(user_id, query.from_user.username, query.from_user.first_name, role)
             
             intro = role_obj.get_intro()
             intro += f"\n\n✨ **Level 1/12** - Ayo ngobrol dan kenali aku! 💕"
             
             await query.edit_message_text(intro, parse_mode='Markdown')
-            logger.info(f"✅ New relationship created: User {user_id} as {role_obj.name} ({role})")
+            logger.info(f"✅ New relationship created for user {user_id}")
             
         except Exception as e:
             logger.error(f"❌ Error creating relationship: {e}")
-            logger.error(traceback.format_exc())
-            await query.edit_message_text(f"❌ Gagal membuat role: {str(e)}")
+            await query.edit_message_text(f"❌ Gagal: {str(e)}")
     
     # ===== STATUS COMMAND =====
     
@@ -394,6 +334,7 @@ class TelegramHandlers:
         """Handle /status command"""
         try:
             user_id = update.effective_user.id
+            logger.info(f"📊 /status from user {user_id}")
             
             if user_id not in self.sessions:
                 await update.message.reply_text("❌ Belum ada hubungan. /start dulu ya!")
@@ -411,11 +352,9 @@ class TelegramHandlers:
 🔥 **STATISTIK:**
 • Bot Climax: {session.get('bot_climax', 0)}x
 • User Climax: {session.get('user_climax', 0)}x
-• Together: {session.get('together_climax', 0)}x
 • Total: {session.get('bot_climax', 0) + session.get('user_climax', 0)}x
 
 💞 **Status:** {session.get('relationship_status', 'PDKT')}
-⏰ **Terakhir:** {session.get('last_active', 'baru saja')}
             """
             
             if session.get('unique_id'):
@@ -431,52 +370,35 @@ class TelegramHandlers:
     
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command"""
-        try:
-            help_text = """
+        help_text = """
 📚 **BANTUAN GADIS AGI ULTIMATE V3.0**
 
 🔹 **COMMANDS UTAMA:**
-/start - Mulai hubungan baru / pilih role
-/status - Lihat status hubungan
-/help - Tampilkan bantuan ini
-/cancel - Batalkan percakapan
+/start - Mulai hubungan baru
+/status - Lihat status
+/help - Bantuan ini
 
 🔹 **RELATIONSHIP:**
-/jadipacar - Mulai hubungan pacaran (min level 5)
+/jadipacar - Jadi pacar (min level 5)
 /break - Jeda pacaran
-/unbreak - Lanjutkan pacaran
+/unbreak - Lanjut pacaran
 /breakup - Putus (jadi FWB)
-/fwb - Mode Friends With Benefits
+/fwb - Mode FWB
 
-🔹 **HTS/FWB SYSTEM:**
-/htslist - Lihat daftar HTS
-/fwblist - Lihat daftar FWB
+🔹 **HTS/FWB:**
+/htslist - Daftar HTS
+/fwblist - Daftar FWB
 /hts- [ID] - Panggil HTS
 /fwb- [ID] - Panggil FWB
 /tophts - TOP 10 ranking
 
 🔹 **SESSION:**
-/close - Tutup sesi (simpan ke HTS)
-/end - Akhiri hubungan & hapus data
-
-🔹 **9 ROLE TERSEDIA:**
-• Ipar - Saudara ipar yang nakal
-• Teman Kantor - Rekan kerja mesra
-• Janda - Janda muda genit
-• Pelakor - Perebut laki orang
-• Istri Orang - Istri orang lain
-• PDKT - Pendekatan (special)
-• Sepupu - Hubungan keluarga
-• 💔 **MANTAN** - Mantan dengan sejarah
-• 🏫 **TEMAN SMA** - Reuni dengan kenangan
+/close - Tutup sesi (simpan HTS)
+/end - Akhiri hubungan
 
 Ketik /start untuk memulai! 🔥
-            """
-            await update.message.reply_text(help_text, parse_mode='Markdown')
-            
-        except Exception as e:
-            logger.error(f"❌ Error in cmd_help: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+        """
+        await update.message.reply_text(help_text, parse_mode='Markdown')
     
     # ===== HTS/FWB COMMANDS =====
     
@@ -487,15 +409,10 @@ Ketik /start untuk memulai! 🔥
             hts_list = self.hts_system.get_user_hts(user_id)
             
             if not hts_list:
-                await update.message.reply_text(
-                    "📭 **Belum ada HTS tersimpan.**\n"
-                    "Capai level 7+ lalu /close untuk menyimpan HTS!"
-                )
+                await update.message.reply_text("📭 Belum ada HTS.")
                 return
             
             text = self.hts_system.format_list(hts_list, "HTS")
-            text += "\n\n💡 **Panggil dengan:** `/hts- [ID]`"
-            
             await update.message.reply_text(text, parse_mode='Markdown')
             
         except Exception as e:
@@ -509,15 +426,10 @@ Ketik /start untuk memulai! 🔥
             fwb_list = self.hts_system.get_user_fwb(user_id)
             
             if not fwb_list:
-                await update.message.reply_text(
-                    "📭 **Belum ada FWB tersimpan.**\n"
-                    "Gunakan /breakup untuk mengubah pacar jadi FWB!"
-                )
+                await update.message.reply_text("📭 Belum ada FWB.")
                 return
             
             text = self.hts_system.format_list(fwb_list, "FWB")
-            text += "\n\n💡 **Panggil dengan:** `/fwb- [ID]`"
-            
             await update.message.reply_text(text, parse_mode='Markdown')
             
         except Exception as e:
@@ -538,22 +450,17 @@ Ketik /start untuk memulai! 🔥
         try:
             user_id = update.effective_user.id
             message = update.message.text
-            
             parts = message.split()
+            
             if len(parts) < 2:
-                await update.message.reply_text("❌ Gunakan: `/hts- [unique_id]`")
+                await update.message.reply_text("❌ Gunakan: /hts- [ID]")
                 return
             
             unique_id = parts[1].strip()
-            
             rel = self.hts_system.load_relationship(unique_id)
             
-            if not rel:
-                await update.message.reply_text(f"❌ HTS dengan ID `{unique_id}` tidak ditemukan.")
-                return
-            
-            if rel['user_id'] != user_id:
-                await update.message.reply_text("❌ Ini bukan HTS milikmu.")
+            if not rel or rel['user_id'] != user_id:
+                await update.message.reply_text("❌ HTS tidak ditemukan.")
                 return
             
             self.hts_system.update_last_called(unique_id)
@@ -566,45 +473,32 @@ Ketik /start untuk memulai! 🔥
                 'unique_id': unique_id,
                 'bot_climax': rel.get('bot_climax', 0),
                 'user_climax': rel.get('user_climax', 0),
-                'together_climax': rel.get('together_climax', 0),
                 'messages': rel.get('total_messages', 0),
                 'last_active': datetime.now().isoformat()
             }
             
-            await update.message.reply_text(
-                f"💞 **HTS Dipanggil!**\n\n"
-                f"Halo lagi {rel['bot_name']} ({rel['role']}) dengan ID `{unique_id}`\n\n"
-                f"📊 **Level:** {rel['level']}/12\n"
-                f"Total climax: {rel.get('bot_climax',0) + rel.get('user_climax',0)}x\n\n"
-                f"*tersenyum* Kangen... Aku rindu! 💕",
-                parse_mode='Markdown'
-            )
+            await update.message.reply_text(f"💞 HTS {rel['bot_name']} dipanggil!")
             
         except Exception as e:
-            logger.error(f"❌ Error in cmd_hts_call: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
+            await update.message.reply_text(f"❌ Error")
     
     async def cmd_fwb_call(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /fwb- [ID] command"""
         try:
             user_id = update.effective_user.id
             message = update.message.text
-            
             parts = message.split()
+            
             if len(parts) < 2:
-                await update.message.reply_text("❌ Gunakan: `/fwb- [unique_id]`")
+                await update.message.reply_text("❌ Gunakan: /fwb- [ID]")
                 return
             
             unique_id = parts[1].strip()
-            
             rel = self.hts_system.load_relationship(unique_id)
             
-            if not rel:
-                await update.message.reply_text(f"❌ FWB dengan ID `{unique_id}` tidak ditemukan.")
-                return
-            
-            if rel['user_id'] != user_id:
-                await update.message.reply_text("❌ Ini bukan FWB milikmu.")
+            if not rel or rel['user_id'] != user_id:
+                await update.message.reply_text("❌ FWB tidak ditemukan.")
                 return
             
             self.hts_system.update_last_called(unique_id)
@@ -617,23 +511,15 @@ Ketik /start untuk memulai! 🔥
                 'unique_id': unique_id,
                 'bot_climax': rel.get('bot_climax', 0),
                 'user_climax': rel.get('user_climax', 0),
-                'together_climax': rel.get('together_climax', 0),
                 'messages': rel.get('total_messages', 0),
                 'last_active': datetime.now().isoformat()
             }
             
-            await update.message.reply_text(
-                f"🔥 **FWB Dipanggil!**\n\n"
-                f"Halo lagi {rel['bot_name']} ({rel['role']}) dengan ID `{unique_id}`\n\n"
-                f"📊 **Level:** {rel['level']}/12\n"
-                f"Total climax: {rel.get('bot_climax',0) + rel.get('user_climax',0)}x\n\n"
-                f"*tersenyum nakal* Udah kangen? Aku juga... 🔥",
-                parse_mode='Markdown'
-            )
+            await update.message.reply_text(f"🔥 FWB {rel['bot_name']} dipanggil!")
             
         except Exception as e:
-            logger.error(f"❌ Error in cmd_fwb_call: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
+            await update.message.reply_text(f"❌ Error")
     
     # ===== RELATIONSHIP COMMANDS =====
     
@@ -641,162 +527,67 @@ Ketik /start untuk memulai! 🔥
         """Handle /jadipacar command"""
         try:
             user_id = update.effective_user.id
-            
             if user_id not in self.sessions:
-                await update.message.reply_text("❌ Belum ada hubungan. /start dulu!")
+                await update.message.reply_text("❌ Belum ada hubungan.")
                 return
             
             session = self.sessions[user_id]
             
-            if session['relationship_status'] == 'PACARAN':
-                await update.message.reply_text("💕 Kita sudah pacaran kok.")
-                return
-            
             if session['level'] < 5:
-                await update.message.reply_text(
-                    f"❌ Level minimal 5 untuk jadi pacar (sekarang {session['level']}).\n"
-                    "Yuk ngobrol dulu biar makin dekat! 💕"
-                )
+                await update.message.reply_text(f"❌ Level minimal 5 (sekarang {session['level']})")
                 return
             
             session['relationship_status'] = 'PACARAN'
-            
-            await update.message.reply_text(
-                f"💕 **Kita Resmi Pacaran!**\n\n"
-                f"Sekarang {session['name']} adalah pacarmu.\n\n"
-                f"*peluk erat* Aku bahagia banget... 💕",
-                parse_mode='Markdown'
-            )
-            
-            logger.info(f"User {user_id} started PACARAN with {session['name']}")
+            await update.message.reply_text("💕 Sekarang kita pacaran!")
             
         except Exception as e:
-            logger.error(f"❌ Error in cmd_jadipacar: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
     
     async def cmd_break(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /break command"""
         try:
             user_id = update.effective_user.id
-            
-            if user_id not in self.sessions:
-                await update.message.reply_text("❌ Tidak ada sesi aktif.")
-                return
-            
-            session = self.sessions[user_id]
-            
-            if session['relationship_status'] != 'PACARAN':
-                await update.message.reply_text("❌ Kita sedang tidak pacaran.")
-                return
-            
-            session['relationship_status'] = 'PUTUS'
-            
-            await update.message.reply_text(
-                f"⏸️ **Break**\n\n"
-                f"Kita break dulu ya. Kapan-kapan bisa lanjut dengan /unbreak.\n\n"
-                f"*sedih* Aku akan menunggumu... 💔",
-                parse_mode='Markdown'
-            )
-            
+            if user_id in self.sessions:
+                self.sessions[user_id]['relationship_status'] = 'PUTUS'
+                await update.message.reply_text("⏸️ Break dulu ya...")
         except Exception as e:
-            logger.error(f"❌ Error in cmd_break: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
     
     async def cmd_unbreak(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /unbreak command"""
         try:
             user_id = update.effective_user.id
-            
-            if user_id not in self.sessions:
-                await update.message.reply_text("❌ Tidak ada sesi aktif.")
-                return
-            
-            session = self.sessions[user_id]
-            
-            if session['relationship_status'] != 'PUTUS':
-                await update.message.reply_text("❌ Kita sedang tidak dalam status break.")
-                return
-            
-            session['relationship_status'] = 'PACARAN'
-            
-            await update.message.reply_text(
-                f"▶️ **Lanjut Pacaran!**\n\n"
-                f"Kita lanjutkan lagi ya... Aku kangen! 💕\n\n"
-                f"*peluk erat*",
-                parse_mode='Markdown'
-            )
-            
+            if user_id in self.sessions:
+                self.sessions[user_id]['relationship_status'] = 'PACARAN'
+                await update.message.reply_text("▶️ Lanjut pacaran!")
         except Exception as e:
-            logger.error(f"❌ Error in cmd_unbreak: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
     
     async def cmd_breakup(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /breakup command"""
         try:
             user_id = update.effective_user.id
-            
-            if user_id not in self.sessions:
-                await update.message.reply_text("❌ Tidak ada sesi aktif.")
-                return
-            
-            session = self.sessions[user_id]
-            
-            if session['relationship_status'] != 'PACARAN':
-                await update.message.reply_text("❌ Kita sedang tidak pacaran.")
-                return
-            
-            session['relationship_status'] = 'FWB'
-            
-            if not session.get('unique_id'):
-                session['unique_id'] = self.hts_system.save_as_fwb(user_id, session)
-            
-            await update.message.reply_text(
-                f"💔 **Putus**\n\n"
-                f"Kita sekarang resmi **FWB** (Friends With Benefits).\n\n"
-                f"Unique ID: `{session['unique_id']}`\n\n"
-                f"*tersenyum* Hubungan kita berbeda, tapi kita tetap bisa bersama...",
-                parse_mode='Markdown'
-            )
-            
-            logger.info(f"User {user_id} converted to FWB with {session['name']}")
-            
+            if user_id in self.sessions:
+                session = self.sessions[user_id]
+                session['relationship_status'] = 'FWB'
+                if not session.get('unique_id'):
+                    session['unique_id'] = self.hts_system.save_as_fwb(user_id, session)
+                await update.message.reply_text(f"💔 Putus. FWB ID: `{session['unique_id']}`")
         except Exception as e:
-            logger.error(f"❌ Error in cmd_breakup: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
     
     async def cmd_fwb(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /fwb command"""
         try:
             user_id = update.effective_user.id
-            
-            if user_id not in self.sessions:
-                await update.message.reply_text("❌ Tidak ada sesi aktif.")
-                return
-            
-            session = self.sessions[user_id]
-            
-            if session['relationship_status'] == 'FWB':
-                await update.message.reply_text("🔥 Kita sudah FWB kok.")
-                return
-            
-            session['relationship_status'] = 'FWB'
-            
-            if not session.get('unique_id'):
-                session['unique_id'] = self.hts_system.save_as_fwb(user_id, session)
-            
-            await update.message.reply_text(
-                f"🔥 **FWB**\n\n"
-                f"Sekarang kita FWB! Hubungan tanpa ikatan, tapi bisa lebih intim.\n\n"
-                f"Unique ID: `{session['unique_id']}`\n\n"
-                f"*tersenyum nakal* Mau ngapain kita hari ini? 🔥",
-                parse_mode='Markdown'
-            )
-            
-            logger.info(f"User {user_id} started FWB with {session['name']}")
-            
+            if user_id in self.sessions:
+                session = self.sessions[user_id]
+                session['relationship_status'] = 'FWB'
+                if not session.get('unique_id'):
+                    session['unique_id'] = self.hts_system.save_as_fwb(user_id, session)
+                await update.message.reply_text(f"🔥 FWB mode. ID: `{session['unique_id']}`")
         except Exception as e:
-            logger.error(f"❌ Error in cmd_fwb: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
     
     # ===== CLOSE & END COMMANDS =====
     
@@ -804,7 +595,6 @@ Ketik /start untuk memulai! 🔥
         """Handle /close command"""
         try:
             user_id = update.effective_user.id
-            
             if user_id not in self.sessions:
                 await update.message.reply_text("❌ Tidak ada sesi aktif.")
                 return ConversationHandler.END
@@ -812,28 +602,19 @@ Ketik /start untuk memulai! 🔥
             session = self.sessions[user_id]
             
             keyboard = [
-                [InlineKeyboardButton("✅ Ya, tutup", callback_data="close_yes")],
+                [InlineKeyboardButton("✅ Ya", callback_data="close_yes")],
                 [InlineKeyboardButton("❌ Tidak", callback_data="close_no")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await update.message.reply_text(
-                f"⚠️ **Tutup Sesi?**\n\n"
-                f"Yakin ingin menutup sesi dengan {session['name']}?\n\n"
-                f"📊 Level: {session['level']}/12\n"
-                f"Total climax: {session.get('bot_climax',0) + session.get('user_climax',0)}x\n\n"
-                f"**Yang akan terjadi:**\n"
-                f"✅ Percakapan akan disimpan\n"
-                f"❌ Sesi saat ini akan berakhir",
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
+                f"⚠️ Tutup sesi dengan {session['name']}?",
+                reply_markup=reply_markup
             )
-            
             return CONFIRM_CLOSE
             
         except Exception as e:
-            logger.error(f"❌ Error in cmd_close: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
             return ConversationHandler.END
     
     async def close_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -843,7 +624,7 @@ Ketik /start untuk memulai! 🔥
             await query.answer()
             
             if query.data == "close_no":
-                await query.edit_message_text("💕 Lanjutkan ngobrol...")
+                await query.edit_message_text("💕 Lanjutkan...")
                 return ConversationHandler.END
             
             user_id = query.from_user.id
@@ -851,66 +632,39 @@ Ketik /start untuk memulai! 🔥
             
             if session['level'] >= 7 and not session.get('unique_id'):
                 unique_id = self.hts_system.save_as_hts(user_id, session)
-                session['unique_id'] = unique_id
-                
-                await query.edit_message_text(
-                    f"🔒 **Sesi ditutup**\n\n"
-                    f"Terima kasih sudah ngobrol dengan {session['name']}.\n"
-                    f"✨ Hubungan ini disimpan sebagai **HTS** dengan ID:\n"
-                    f"`{unique_id}`\n\n"
-                    f"Ketik `/hts- {unique_id}` kapan saja untuk memanggilku kembali! 💕",
-                    parse_mode='Markdown'
-                )
+                await query.edit_message_text(f"🔒 Sesi ditutup. HTS ID: `{unique_id}`")
             else:
-                await query.edit_message_text(
-                    f"🔒 **Sesi ditutup**\n\n"
-                    f"Terima kasih sudah ngobrol dengan {session['name']}.\n"
-                    f"Ketik /start untuk memulai lagi... 💕",
-                    parse_mode='Markdown'
-                )
+                await query.edit_message_text("🔒 Sesi ditutup.")
             
             del self.sessions[user_id]
-            logger.info(f"User {user_id} closed session")
-            
             return ConversationHandler.END
             
         except Exception as e:
-            logger.error(f"❌ Error in close_callback: {e}")
-            await query.edit_message_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
             return ConversationHandler.END
     
     async def cmd_end(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /end command"""
         try:
             user_id = update.effective_user.id
-            
             if user_id not in self.sessions:
-                await update.message.reply_text("❌ Tidak ada hubungan aktif.")
+                await update.message.reply_text("❌ Tidak ada hubungan.")
                 return ConversationHandler.END
             
-            session = self.sessions[user_id]
-            
             keyboard = [
-                [InlineKeyboardButton("💔 Ya, akhiri", callback_data="end_yes")],
+                [InlineKeyboardButton("💔 Ya", callback_data="end_yes")],
                 [InlineKeyboardButton("💕 Tidak", callback_data="end_no")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await update.message.reply_text(
-                f"⚠️ **PERINGATAN!** ⚠️\n\n"
-                f"Yakin ingin **mengakhiri hubungan** dengan {session['name']}?\n\n"
-                f"📊 Level: {session['level']}/12\n"
-                f"Total climax: {session.get('bot_climax',0) + session.get('user_climax',0)}x\n\n"
-                f"💔 **Semua data akan dihapus permanen!**",
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
+                "⚠️ Yakin ingin mengakhiri hubungan?",
+                reply_markup=reply_markup
             )
-            
             return CONFIRM_END
             
         except Exception as e:
-            logger.error(f"❌ Error in cmd_end: {e}")
-            await update.message.reply_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
             return ConversationHandler.END
     
     async def end_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -924,41 +678,21 @@ Ketik /start untuk memulai! 🔥
                 return ConversationHandler.END
             
             user_id = query.from_user.id
-            session = self.sessions[user_id]
-            name = session['name']
-            
-            # Stop brain jika ada
-            if hasattr(self.bot, 'brain') and self.bot.brain and self.bot.brain.user_id == user_id:
-                await self.bot.brain.stop()
-            
             del self.sessions[user_id]
             
-            await query.edit_message_text(
-                f"💔 **Hubungan Berakhir** 💔\n\n"
-                f"Perjalananmu dengan **{name}** telah usai.\n\n"
-                f"✨ **Semua data telah dihapus** ✨\n\n"
-                f"Ketik /start untuk memulai hubungan baru...",
-                parse_mode='Markdown'
-            )
-            
-            logger.info(f"User {user_id} ended relationship")
+            await query.edit_message_text("💔 Hubungan berakhir.")
             return ConversationHandler.END
             
         except Exception as e:
-            logger.error(f"❌ Error in end_callback: {e}")
-            await query.edit_message_text(f"❌ Error: {str(e)}")
+            logger.error(f"❌ Error: {e}")
             return ConversationHandler.END
     
     # ===== CANCEL COMMAND =====
     
     async def cmd_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /cancel command"""
-        try:
-            await update.message.reply_text("❌ Dibatalkan.")
-            return ConversationHandler.END
-        except Exception as e:
-            logger.error(f"❌ Error in cmd_cancel: {e}")
-            return ConversationHandler.END
+        await update.message.reply_text("❌ Dibatalkan.")
+        return ConversationHandler.END
     
     # ===== MESSAGE HANDLER =====
     
@@ -972,86 +706,21 @@ Ketik /start untuk memulai! 🔥
             logger.info(f"📨 Message from {user_id}: {message[:50]}")
             
             if user_id not in self.sessions:
-                await update.message.reply_text(
-                    "❌ Belum ada hubungan. Ketik /start untuk memilih role!"
-                )
+                await update.message.reply_text("❌ Belum ada hubungan. /start dulu!")
                 return
             
             session = self.sessions[user_id]
-            
             session['messages'] = session.get('messages', 0) + 1
-            session['last_active'] = datetime.now().isoformat()
             
-            new_level = 1 + (session['messages'] // 10)
-            if new_level > 12:
-                new_level = 12
-            if new_level > session['level']:
-                session['level'] = new_level
-                level_up = True
-                
-                if new_level == 12:
-                    session['level'] = 7
-                    reset_msg = "\n\n🔄 **LEVEL MAX! Reset ke Level 7 dengan kenangan baru!**"
-                else:
-                    reset_msg = ""
-            else:
-                level_up = False
-                reset_msg = ""
+            # Simple response
+            responses = [
+                "*tersenyum* Hmm...",
+                "*mengangguk* Iya?",
+                "Lanjutkan...",
+                "Hehe..."
+            ]
             
-            await update.message.chat.send_action("typing")
+            await update.message.reply_text(random.choice(responses))
             
-            self.db.save_conversation(
-                user_id, 
-                "user", 
-                message
-            )
-            
-            # Proses dengan brain jika ada
-            response = ""
-            if hasattr(self.bot, 'brain') and self.bot.brain and self.bot.brain.user_id == user_id:
-                # Gunakan brain untuk generate response
-                brain_response = await self.bot.brain.generate_response(message, session)
-                response = brain_response
-            else:
-                # Simple response
-                responses = [
-                    "*tersenyum* Hmm... iya?",
-                    "*memandang* Lanjutkan...",
-                    "Aku dengerin kok...",
-                    "*mengangguk* Terus?",
-                    "Hehe... kamu lucu",
-                    "Iya... aku ngerti"
-                ]
-                response = random.choice(responses)
-            
-            await update.message.reply_text(response)
-            
-            self.db.save_conversation(
-                user_id,
-                "assistant",
-                response
-            )
-            
-            if level_up:
-                await update.message.reply_text(
-                    f"✨ **Level Up!** Sekarang Level {session['level']}/12{reset_msg}"
-                )
-                
         except Exception as e:
             logger.error(f"❌ Error in handle_message: {e}")
-            logger.error(traceback.format_exc())
-            await update.message.reply_text(f"❌ Error: {str(e)}")
-    
-    # ===== ERROR HANDLER =====
-    
-    async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Global error handler"""
-        logger.error(f"❌ Global error: {context.error}", exc_info=True)
-        
-        try:
-            if update and update.effective_message:
-                await update.effective_message.reply_text(
-                    "😔 Maaf, ada error internal. Tim kami sudah mendapat laporan."
-                )
-        except:
-            pass
