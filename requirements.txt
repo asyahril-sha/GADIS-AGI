@@ -1,8 +1,15 @@
+# Telegram Bot
 python-telegram-bot==20.7
+
+# AI & API
 aiohttp==3.9.1
+openai==1.12.0
+
+# Web Server
 Flask==3.0.0
-python-dotenv==1.0.0
 gunicorn==21.2.0
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
 numpy==1.24.0
-sentence-transformers==2.2.2
-scikit-learn==1.3.0
