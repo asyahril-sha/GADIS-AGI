@@ -116,6 +116,15 @@ class Database:
                     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
                 )
             ''')
+
+            # ===== TABEL AI STATES =====
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS ai_states (
+                    admin_id INTEGER PRIMARY KEY,
+                    state TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             
             # ===== INDEXES =====
             c.execute('CREATE INDEX IF NOT EXISTS idx_users_active ON users(last_active)')
