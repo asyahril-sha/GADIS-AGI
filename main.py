@@ -23,8 +23,8 @@ from telegram.request import HTTPXRequest
 from config import Config
 from database import Database
 from systems.hts_fwb_system import HTSFWBSystem, RankingSystem
-from telegram.handlers import TelegramHandlers
-from telegram.commands import AdditionalCommands
+from tg_bot.handlers import TelegramHandlers
+from tg_bot.commands import AdditionalCommands
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
