@@ -423,3 +423,26 @@ class Database:
             'climax': self.get_total_climax(),
             'today_messages': self.get_today_messages()
         }
+        
+    # ===== AI STATE METHODS =====
+    
+    def save_ai_state(self, admin_id: int, state: dict) -> bool:
+        """Simpan AI state"""
+        with self._get_conn() as conn:
+            c = conn.cursor()
+            c.execute('''
+                INSERT OR REPLACE INTO ai_states (admin_id, state, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (admin_id, json.dumps(state)))
+            conn.commit()
+            return True
+    
+    def load_ai_state(self, admin_id: int) -> Optional[dict]:
+        """Load AI state"""
+        with self._get_conn() as conn:
+            c = conn.cursor()
+            c.execute('SELECT state FROM ai_states WHERE admin_id = ?', (admin_id,))
+            row = c.fetchone()
+            if row:
+                return json.loads(row[0])
+            return None
