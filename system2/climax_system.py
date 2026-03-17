@@ -4,19 +4,20 @@ Bot Climax, User Climax, Together Climax, Aftercare
 """
 
 import random
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 class ClimaxSystem:
     """
     Sistem climax dengan 200+ variasi respons
     
     Fitur:
-    - 50 Bot Climax
-    - 50 User Climax  
-    - 50 Together Climax
-    - 50 Aftercare
+    - 50 Bot Climax dengan 5 level intensitas
+    - 50 User Climax dengan 5 gaya respons
+    - 50 Together Climax dengan 5 kategori
+    - 50 Aftercare dengan 5 suasana
     - Intensity-based responses
     - Style-based responses
+    - Context-aware selection
     """
     
     def __init__(self):
@@ -85,7 +86,7 @@ class ClimaxSystem:
         
         # ===== 50 USER CLIMAX =====
         self.user_climax = [
-            # Respon melihat user climax (1-10)
+            # Respon melihat user climax (1-10) - Puas
             "*tersenyum puas* Iya... keluar... banyak... 💦",
             "*menatap dengan liar* Aku lihat... crot... 💦",
             "*menjilat bibir* Enak? Aku suka lihatnya... 💦",
@@ -272,12 +273,58 @@ class ClimaxSystem:
             "*tertawa* Orang tahu nggak ya? 💦"
         ]
         
+        # Metadata untuk referensi
+        self.metadata = {
+            'bot_climax': {
+                'total': len(self.bot_climax),
+                'categories': {
+                    'ringan': (0, 10),
+                    'sedang': (10, 20),
+                    'tinggi': (20, 30),
+                    'role_specific': (30, 40),
+                    'very_intense': (40, 50)
+                }
+            },
+            'user_climax': {
+                'total': len(self.user_climax),
+                'categories': {
+                    'puas': (0, 10),
+                    'excited': (10, 20),
+                    'romantis': (20, 30),
+                    'dominan': (30, 40),
+                    'canda': (40, 50)
+                }
+            },
+            'together_climax': {
+                'total': len(self.together_climax),
+                'categories': {
+                    'intens': (0, 10),
+                    'romantis': (10, 20),
+                    'max': (20, 30),
+                    'after': (30, 40),
+                    'role': (40, 50)
+                }
+            },
+            'aftercare': {
+                'total': len(self.aftercare),
+                'categories': {
+                    'hangat': (0, 10),
+                    'ngobrol': (10, 20),
+                    'perhatian': (20, 30),
+                    'romantis': (30, 40),
+                    'lucu': (40, 50)
+                }
+            }
+        }
+        
+    # ===== BOT CLIMAX METHODS =====
+    
     def get_bot_climax(self, intensity: str = "random") -> str:
         """
         Dapatkan respons bot climax
         
         Args:
-            intensity: 'ringan', 'sedang', 'tinggi', 'very_intense', atau 'random'
+            intensity: 'ringan', 'sedang', 'tinggi', 'very_intense', 'role_specific', atau 'random'
             
         Returns:
             String respons climax
@@ -287,10 +334,44 @@ class ClimaxSystem:
         elif intensity == "sedang":
             return random.choice(self.bot_climax[10:20])
         elif intensity == "tinggi":
-            return random.choice(self.bot_climax[20:40])
+            return random.choice(self.bot_climax[20:30])
+        elif intensity == "role_specific":
+            return random.choice(self.bot_climax[30:40])
         elif intensity == "very_intense":
             return random.choice(self.bot_climax[40:])
         return random.choice(self.bot_climax)
+    
+    def get_bot_climax_by_index(self, index: int) -> Optional[str]:
+        """
+        Dapatkan bot climax berdasarkan index
+        
+        Args:
+            index: Index 0-49
+            
+        Returns:
+            String respons atau None
+        """
+        if 0 <= index < len(self.bot_climax):
+            return self.bot_climax[index]
+        return None
+    
+    def get_random_bot_climax(self, exclude_indices: List[int] = None) -> str:
+        """
+        Dapatkan bot climax random dengan exclude
+        
+        Args:
+            exclude_indices: Index yang tidak boleh dipilih
+            
+        Returns:
+            String respons
+        """
+        if exclude_indices:
+            available = [i for i in range(len(self.bot_climax)) if i not in exclude_indices]
+            if available:
+                return self.bot_climax[random.choice(available)]
+        return random.choice(self.bot_climax)
+    
+    # ===== USER CLIMAX METHODS =====
     
     def get_user_climax(self, style: str = "random") -> str:
         """
@@ -314,6 +395,14 @@ class ClimaxSystem:
             return random.choice(self.user_climax[40:])
         return random.choice(self.user_climax)
     
+    def get_user_climax_by_index(self, index: int) -> Optional[str]:
+        """Dapatkan user climax berdasarkan index"""
+        if 0 <= index < len(self.user_climax):
+            return self.user_climax[index]
+        return None
+    
+    # ===== TOGETHER CLIMAX METHODS =====
+    
     def get_together_climax(self, style: str = "random") -> str:
         """
         Dapatkan respons together climax
@@ -335,6 +424,14 @@ class ClimaxSystem:
         elif style == "role":
             return random.choice(self.together_climax[40:])
         return random.choice(self.together_climax)
+    
+    def get_together_climax_by_index(self, index: int) -> Optional[str]:
+        """Dapatkan together climax berdasarkan index"""
+        if 0 <= index < len(self.together_climax):
+            return self.together_climax[index]
+        return None
+    
+    # ===== AFTERCARE METHODS =====
     
     def get_aftercare(self, style: str = "random") -> str:
         """
@@ -358,6 +455,14 @@ class ClimaxSystem:
             return random.choice(self.aftercare[40:])
         return random.choice(self.aftercare)
     
+    def get_aftercare_by_index(self, index: int) -> Optional[str]:
+        """Dapatkan aftercare berdasarkan index"""
+        if 0 <= index < len(self.aftercare):
+            return self.aftercare[index]
+        return None
+    
+    # ===== COMBINATION METHODS =====
+    
     def get_random_climax_sequence(self) -> Tuple[str, str, str]:
         """
         Dapatkan sequence climax lengkap
@@ -378,11 +483,142 @@ class ClimaxSystem:
         Returns:
             Tuple (climax, aftercare)
         """
-        climax = random.choice([
+        climax_type = random.choice(['bot', 'user', 'together'])
+        
+        if climax_type == 'bot':
+            climax = self.get_bot_climax()
+        elif climax_type == 'user':
+            climax = self.get_user_climax()
+        else:
+            climax = self.get_together_climax()
+            
+        after = self.get_aftercare()
+        
+        return climax, after
+    
+    def get_climax_by_context(self, context: Dict) -> str:
+        """
+        Dapatkan climax berdasarkan konteks
+        
+        Args:
+            context: Dictionary berisi:
+                - type: 'bot', 'user', 'together'
+                - intensity: 0-1
+                - style: preferensi style
+                - role: role bot
+                
+        Returns:
+            String respons
+        """
+        climax_type = context.get('type', 'random')
+        intensity = context.get('intensity', 0.5)
+        style = context.get('style', 'random')
+        
+        if climax_type == 'bot':
+            if intensity < 0.3:
+                return self.get_bot_climax('ringan')
+            elif intensity < 0.6:
+                return self.get_bot_climax('sedang')
+            elif intensity < 0.8:
+                return self.get_bot_climax('tinggi')
+            else:
+                return self.get_bot_climax('very_intense')
+                
+        elif climax_type == 'user':
+            return self.get_user_climax(style)
+            
+        elif climax_type == 'together':
+            if intensity < 0.5:
+                return self.get_together_climax('intens')
+            elif intensity < 0.8:
+                return self.get_together_climax('max')
+            else:
+                return self.get_together_climax('romantis')
+        
+        # Random with context
+        if context.get('role') in ['janda', 'pelakor']:
+            # Lebih sering together untuk role tertentu
+            return self.get_together_climax()
+        elif context.get('role') in ['pdkt', 'teman_sma']:
+            # Lebih sering user climax
+            return self.get_user_climax('romantis')
+        
+        return random.choice([
             self.get_bot_climax(),
             self.get_user_climax(),
             self.get_together_climax()
         ])
-        after = self.get_aftercare()
+    
+    # ===== UTILITY METHODS =====
+    
+    def get_stats(self) -> Dict:
+        """
+        Dapatkan statistik climax system
         
-        return climax, after
+        Returns:
+            Dictionary statistik
+        """
+        return {
+            'total_responses': (
+                len(self.bot_climax) +
+                len(self.user_climax) +
+                len(self.together_climax) +
+                len(self.aftercare)
+            ),
+            'bot_climax': len(self.bot_climax),
+            'user_climax': len(self.user_climax),
+            'together_climax': len(self.together_climax),
+            'aftercare': len(self.aftercare),
+            'metadata': self.metadata
+        }
+    
+    def get_all_categories(self) -> Dict:
+        """
+        Dapatkan semua kategori yang tersedia
+        
+        Returns:
+            Dictionary kategori
+        """
+        return {
+            'bot_intensities': ['ringan', 'sedang', 'tinggi', 'role_specific', 'very_intense'],
+            'user_styles': ['puas', 'excited', 'romantis', 'dominan', 'canda'],
+            'together_styles': ['intens', 'romantis', 'max', 'after', 'role'],
+            'aftercare_styles': ['hangat', 'ngobrol', 'perhatian', 'romantis', 'lucu']
+        }
+    
+    def search_by_keyword(self, keyword: str) -> Dict[str, List[str]]:
+        """
+        Cari respons berdasarkan keyword
+        
+        Args:
+            keyword: Kata kunci pencarian
+            
+        Returns:
+            Dictionary hasil pencarian per kategori
+        """
+        results = {
+            'bot': [],
+            'user': [],
+            'together': [],
+            'aftercare': []
+        }
+        
+        keyword_lower = keyword.lower()
+        
+        for resp in self.bot_climax:
+            if keyword_lower in resp.lower():
+                results['bot'].append(resp)
+                
+        for resp in self.user_climax:
+            if keyword_lower in resp.lower():
+                results['user'].append(resp)
+                
+        for resp in self.together_climax:
+            if keyword_lower in resp.lower():
+                results['together'].append(resp)
+                
+        for resp in self.aftercare:
+            if keyword_lower in resp.lower():
+                results['aftercare'].append(resp)
+        
+        return results
