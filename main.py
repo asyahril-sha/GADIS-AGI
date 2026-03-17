@@ -3,7 +3,7 @@
 
 """
 GADIS AGI ULTIMATE V3.0 - MAIN ENTRY POINT
-9 Role + MANTAN + TEMAN SMA dengan HTS/FWB System
+FIXED: Event loop issue
 """
 
 import os
@@ -44,6 +44,8 @@ Config.create_dirs()
 # Flask app
 flask_app = Flask(__name__)
 
+# Global variable untuk loop
+loop = None
 
 class GadisUltimateBot:
     """
@@ -131,7 +133,7 @@ class GadisUltimateBot:
         return " ".join(parts) if parts else "beberapa detik"
 
 
-# Buat instance bot (di luar class)
+# Buat instance bot
 bot = GadisUltimateBot()
 
 
@@ -142,6 +144,8 @@ bot = GadisUltimateBot()
 @flask_app.route('/webhook', methods=['POST'])
 def webhook():
     """Webhook endpoint untuk Telegram"""
+    global loop
+    
     if not bot.is_ready:
         logger.warning("Webhook called but bot not ready")
         return jsonify({'error': 'Bot not ready'}), 503
@@ -150,10 +154,9 @@ def webhook():
         update_data = request.get_json(force=True)
         update_id = update_data.get('update_id', 'unknown')
         
-        # CEK INI - Apakah webhook dipanggil?
-        logger.info(f"🔥🔥🔥 WEBHOOK DIPANGGIL! Update ID: {update_id}")
+        logger.info(f"🔥 Webhook received - Update ID: {update_id}")
         
-        # Log isi pesan
+        # Log pesan
         if 'message' in update_data:
             text = update_data['message'].get('text', 'no text')
             user = update_data['message']['from'].get('username', 'unknown')
@@ -162,15 +165,20 @@ def webhook():
         # Buat update object
         update = Update.de_json(update_data, bot.app.bot)
         
-        # Dapatkan atau buat event loop
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
+        # ===== FIX EVENT LOOP =====
+        # Gunakan loop yang sama untuk semua operasi
+        if loop is None:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
         
-        # Jalankan coroutine
-        loop.run_until_complete(bot.app.process_update(update))
+        # Jalankan update di loop
+        future = asyncio.run_coroutine_threadsafe(
+            bot.app.process_update(update),
+            loop
+        )
+        
+        # Tunggu hasil dengan timeout
+        future.result(timeout=10)
         
         return 'OK', 200
     
@@ -178,16 +186,6 @@ def webhook():
         logger.error(f"❌ Webhook error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-    
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-    
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -242,7 +240,7 @@ def test():
 
 async def setup():
     """Setup bot dan webhook"""
-    global bot
+    global loop, bot
     
     print("\n" + "="*60)
     print("🚀 GADIS AGI ULTIMATE V3.0")
@@ -284,6 +282,8 @@ async def setup():
 
 def run():
     """Run the bot"""
+    global loop
+    
     # Setup event loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -299,7 +299,8 @@ def run():
     print(f"🧪 Test endpoint: /test")
     print("\n" + "="*60)
     
-    flask_app.run(host='0.0.0.0', port=port, debug=False)
+    # Jalankan Flask di thread yang sama
+    flask_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":
