@@ -137,62 +137,68 @@ class TelegramHandlers:
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
-        user = update.effective_user
-        user_id = user.id
-        username = user.username or user.first_name
+        try:
+            user = update.effective_user
+            user_id = user.id
+            username = user.username or user.first_name
         
-        logger.info(f"▶️ /start from {username} (ID: {user_id})")
+            logger.info(f"▶️ /start from {username} (ID: {user_id})")
         
-        # Save user ke database
-        self.db.save_user(user_id, username, user.first_name, "none")
+            # Save user ke database
+            self.db.save_user(user_id, username, user.first_name, "none")
         
-        # Cek apakah sudah ada session aktif
-        if user_id in self.sessions:
-            await update.message.reply_text(
-                "💕 Kamu sudah memiliki sesi aktif. Ketik /status untuk melihat status."
-            )
-            return
+            # Cek apakah sudah ada session aktif
+            if user_id in self.sessions:
+                await update.message.reply_text(
+                    "💕 Kamu sudah memiliki sesi aktif. Ketik /status untuk melihat status."
+                )
+                return
         
-        # Cek apakah ada session di database
-        rels = self.db.get_user_relationships(user_id)
-        if rels:
+            # Cek apakah ada session di database
+            rels = self.db.get_user_relationships(user_id)
+            if rels:
+                keyboard = [
+                    [InlineKeyboardButton("📂 Load Hubungan", callback_data="load_relationship")],
+                    [InlineKeyboardButton("🆕 Mulai Baru", callback_data="new_relationship")],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+            
+                await update.message.reply_text(
+                    "📂 **Ada hubungan tersimpan!**\n\n"
+                    "Pilih untuk melanjutkan atau mulai baru:",
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                return SELECTING_ROLE
+        
+            # Tampilkan menu role
             keyboard = [
-                [InlineKeyboardButton("📂 Load Hubungan", callback_data="load_relationship")],
-                [InlineKeyboardButton("🆕 Mulai Baru", callback_data="new_relationship")],
+                [InlineKeyboardButton("👨‍👩‍👧‍👦 Ipar", callback_data="role_ipar")],
+                [InlineKeyboardButton("💼 Teman Kantor", callback_data="role_teman_kantor")],
+                [InlineKeyboardButton("💃 Janda", callback_data="role_janda")],
+                [InlineKeyboardButton("🦹 Pelakor", callback_data="role_pelakor")],
+                [InlineKeyboardButton("💍 Istri Orang", callback_data="role_istri_orang")],
+                [InlineKeyboardButton("🌿 PDKT", callback_data="role_pdkt")],
+                [InlineKeyboardButton("👥 Sepupu", callback_data="role_sepupu")],
+                [InlineKeyboardButton("💔 Mantan", callback_data="role_mantan")],
+                [InlineKeyboardButton("🏫 Teman SMA", callback_data="role_teman_sma")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            
+        
             await update.message.reply_text(
-                "📂 **Ada hubungan tersimpan!**\n\n"
-                "Pilih untuk melanjutkan atau mulai baru:",
+                "✨ **GADIS AGI ULTIMATE V3.0** ✨\n\n"
+                "Pilih role untuk memulai petualanganmu:\n\n"
+                "Setiap role punya karakter dan cerita berbeda!",
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
+        
             return SELECTING_ROLE
         
-        # Tampilkan menu role
-        keyboard = [
-            [InlineKeyboardButton("👨‍👩‍👧‍👦 Ipar", callback_data="role_ipar")],
-            [InlineKeyboardButton("💼 Teman Kantor", callback_data="role_teman_kantor")],
-            [InlineKeyboardButton("💃 Janda", callback_data="role_janda")],
-            [InlineKeyboardButton("🦹 Pelakor", callback_data="role_pelakor")],
-            [InlineKeyboardButton("💍 Istri Orang", callback_data="role_istri_orang")],
-            [InlineKeyboardButton("🌿 PDKT", callback_data="role_pdkt")],
-            [InlineKeyboardButton("👥 Sepupu", callback_data="role_sepupu")],
-            [InlineKeyboardButton("💔 Mantan", callback_data="role_mantan")],
-            [InlineKeyboardButton("🏫 Teman SMA", callback_data="role_teman_sma")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "✨ **GADIS AGI ULTIMATE V3.0** ✨\n\n"
-            "Pilih role untuk memulai petualanganmu:\n\n"
-            "Setiap role punya karakter dan cerita berbeda!",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        
-        return SELECTING_ROLE
+        except Exception as e:
+            logger.error(f"ERROR in cmd_start: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Error: {str(e)}")
+            return
     
     async def role_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle role selection"""
