@@ -264,11 +264,9 @@ class TelegramHandlers:
             return ConversationHandler.END
     
     async def _create_relationship(self, user_id: int, role: str, query):
-        """Create new relationship"""
-        role_obj = RoleFactory.create(role)
-        
+        # Ganti sementara dengan data dummy
         self.sessions[user_id] = {
-            'name': role_obj.name,
+            'name': 'Dummy',
             'role': role,
             'level': 1,
             'messages': 0,
@@ -278,6 +276,11 @@ class TelegramHandlers:
             'relationship_status': 'PDKT',
             'last_active': datetime.now().isoformat()
         }
+    
+        await query.edit_message_text(
+            f"✅ Test berhasil! Role: {role}",
+            parse_mode='Markdown'
+        )
         
         self.db.save_user(
             user_id, 
