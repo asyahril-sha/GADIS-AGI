@@ -70,6 +70,12 @@ class Config:
         "kamar mandi pesawat",
         "belakang gedung"
     ]
+
+    # ===== AI INFRA SETTINGS =====
+    REQUEST_QUEUE_MAX_CONCURRENT = int(os.getenv("REQUEST_QUEUE_MAX_CONCURRENT", "3"))
+    EMOTIONAL_UPDATE_INTERVAL = int(os.getenv("EMOTIONAL_UPDATE_INTERVAL", "300"))  # 5 menit
+    MEMORY_CONSOLIDATION_INTERVAL = int(os.getenv("MEMORY_CONSOLIDATION_INTERVAL", "3600"))  # 1 jam
+    STATE_SAVE_INTERVAL = int(os.getenv("STATE_SAVE_INTERVAL", "1800"))  # 30 menit
     
     @classmethod
     def validate(cls):
