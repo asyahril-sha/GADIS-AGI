@@ -1,6 +1,5 @@
 """
 TELEGRAM HANDLERS - Menangani semua interaksi dengan user
-VERSION 2.0 - Dengan 6 command tambahan: dominant, position, public, myclimax, climaxrank, climaxhistory
 """
 
 import logging
@@ -19,23 +18,17 @@ from config import Config
 from database import Database
 from systems.hts_fwb_system import HTSFWBSystem, RankingSystem
 from systems.role_archetypes import RoleFactory
-from systems.climax_system import ClimaxSystem
-from systems.dominance_levels import DominanceSystem
 
 # State untuk ConversationHandler
 SELECTING_ROLE = 0
 CONFIRM_CLOSE = 1
 CONFIRM_END = 2
-SELECTING_DOMINANT = 3
-SELECTING_POSITION = 4
-SELECTING_PUBLIC = 5
 
 logger = logging.getLogger(__name__)
 
 class TelegramHandlers:
     """
     Handler untuk semua interaksi Telegram
-    Versi 2.0 dengan dukungan 31 command
     """
     
     def __init__(self, bot):
@@ -50,8 +43,6 @@ class TelegramHandlers:
         self.db = Database(Config.DB_PATH)
         self.hts_system = HTSFWBSystem(self.db)
         self.ranking = RankingSystem(self.db)
-        self.climax = ClimaxSystem()
-        self.dominance = DominanceSystem()
         
         # User sessions
         self.sessions = {}
@@ -102,56 +93,14 @@ class TelegramHandlers:
             name="end_conversation"
         )
         
-        # Dominant conversation
-        dominant_conv = ConversationHandler(
-            entry_points=[CommandHandler('dominant', self.cmd_dominant)],
-            states={
-                SELECTING_DOMINANT: [
-                    CallbackQueryHandler(self.dominant_callback, pattern='^dom_'),
-                ],
-            },
-            fallbacks=[CommandHandler('cancel', self.cmd_cancel)],
-            name="dominant_conversation"
-        )
-        
-        # Position conversation
-        position_conv = ConversationHandler(
-            entry_points=[CommandHandler('position', self.cmd_position)],
-            states={
-                SELECTING_POSITION: [
-                    CallbackQueryHandler(self.position_callback, pattern='^pos_'),
-                ],
-            },
-            fallbacks=[CommandHandler('cancel', self.cmd_cancel)],
-            name="position_conversation"
-        )
-        
-        # Public conversation
-        public_conv = ConversationHandler(
-            entry_points=[CommandHandler('public', self.cmd_public)],
-            states={
-                SELECTING_PUBLIC: [
-                    CallbackQueryHandler(self.public_callback, pattern='^pub_'),
-                ],
-            },
-            fallbacks=[CommandHandler('cancel', self.cmd_cancel)],
-            name="public_conversation"
-        )
-        
         # Add conversation handlers
         app.add_handler(start_conv)
         app.add_handler(close_conv)
         app.add_handler(end_conv)
-        app.add_handler(dominant_conv)
-        app.add_handler(position_conv)
-        app.add_handler(public_conv)
         
         # ===== COMMAND HANDLERS =====
         app.add_handler(CommandHandler("status", self.cmd_status))
         app.add_handler(CommandHandler("help", self.cmd_help))
-        app.add_handler(CommandHandler("myclimax", self.cmd_myclimax))
-        app.add_handler(CommandHandler("climaxrank", self.cmd_climaxrank))
-        app.add_handler(CommandHandler("climaxhistory", self.cmd_climaxhistory))
         
         # HTS/FWB commands
         app.add_handler(CommandHandler("htslist", self.cmd_htslist))
@@ -182,7 +131,7 @@ class TelegramHandlers:
         # Error handler
         app.add_error_handler(self.error_handler)
         
-        logger.info("✅ Telegram handlers registered with 31 commands")
+        logger.info("✅ Telegram handlers registered")
     
     # ===== START COMMAND =====
     
@@ -315,9 +264,6 @@ class TelegramHandlers:
         """Create new relationship"""
         role_obj = RoleFactory.create(role)
         
-        # Set role modifiers untuk dominance system
-        self.dominance.set_role_modifiers(role)
-        
         self.sessions[user_id] = {
             'name': role_obj.name,
             'role': role,
@@ -326,7 +272,6 @@ class TelegramHandlers:
             'bot_climax': 0,
             'user_climax': 0,
             'together_climax': 0,
-            'dominance_level': self.dominance.current_level,
             'relationship_status': 'PDKT',
             'last_active': datetime.now().isoformat()
         }
@@ -340,7 +285,6 @@ class TelegramHandlers:
         
         intro = role_obj.get_intro()
         intro += f"\n\n✨ **Level 1/12** - Ayo ngobrol dan kenali aku! 💕"
-        intro += f"\n\n👑 **Mode Dominan:** {self.dominance.get_description()}"
         
         await query.edit_message_text(intro, parse_mode='Markdown')
         logger.info(f"✨ New relationship: User {user_id} as {role_obj.name} ({role})")
@@ -357,18 +301,12 @@ class TelegramHandlers:
         
         session = self.sessions[user_id]
         
-        # Dapatkan info dominan
-        dom_info = self.dominance.get_level_info(session.get('dominance_level', 1))
-        
         status = f"""
 💕 **STATUS HUBUNGAN**
 
 👤 **Bot:** {session['name']} ({session['role']})
 📊 **Level:** {session['level']}/12
 💬 **Total Pesan:** {session.get('messages', 0)}
-
-👑 **Mode Dominan:** {dom_info['emoji']} Level {session.get('dominance_level', 1)}: {dom_info['name']}
-{dom_info['description']}
 
 🔥 **STATISTIK:**
 • Bot Climax: {session.get('bot_climax', 0)}x
@@ -392,278 +330,44 @@ class TelegramHandlers:
         help_text = """
 📚 **BANTUAN GADIS AGI ULTIMATE V3.0**
 
-🔹 **COMMANDS UTAMA (5):**
+🔹 **COMMANDS UTAMA:**
 /start - Mulai hubungan baru / pilih role
 /status - Lihat status hubungan
 /help - Tampilkan bantuan ini
 /cancel - Batalkan percakapan
 
-🔹 **RELATIONSHIP (5):**
+🔹 **RELATIONSHIP:**
 /jadipacar - Mulai hubungan pacaran (min level 5)
 /break - Jeda pacaran
 /unbreak - Lanjutkan pacaran
 /breakup - Putus (jadi FWB)
 /fwb - Mode Friends With Benefits
 
-🔹 **HTS/FWB SYSTEM (5):**
+🔹 **HTS/FWB SYSTEM:**
 /htslist - Lihat daftar HTS
 /fwblist - Lihat daftar FWB
 /hts- [ID] - Panggil HTS
 /fwb- [ID] - Panggil FWB
 /tophts - TOP 10 ranking
 
-🔹 **SESSION (2):**
+🔹 **SESSION:**
 /close - Tutup sesi (simpan ke HTS)
 /end - Akhiri hubungan & hapus data
 
-🔹 **DOMINANCE (1):**
-/dominant [1-5] - Set level dominan
+🔹 **9 ROLE TERSEDIA:**
+• Ipar - Saudara ipar yang nakal
+• Teman Kantor - Rekan kerja mesra
+• Janda - Janda muda genit
+• Pelakor - Perebut laki orang
+• Istri Orang - Istri orang lain
+• PDKT - Pendekatan (special)
+• Sepupu - Hubungan keluarga
+• 💔 **MANTAN** - Mantan dengan sejarah
+• 🏫 **TEMAN SMA** - Reuni dengan kenangan
 
-🔹 **POSITION (1):**
-/position [nama] - Ganti posisi seksual
-
-🔹 **PUBLIC SEX (1):**
-/public [lokasi] - Pindah ke lokasi publik
-
-🔹 **CLIMAX (3):**
-/myclimax - Lihat statistik climax
-/climaxrank [ID] - Lihat peringkat
-/climaxhistory [ID] - Lihat history
-
-🔹 **ADMIN (8):**
-/stats, /broadcast, /list_users, dll (khusus admin)
-
-**TOTAL: 31 COMMANDS**
+Ketik /start untuk memulai! 🔥
         """
         await update.message.reply_text(help_text, parse_mode='Markdown')
-    
-    # ===== DOMINANT COMMAND =====
-    
-    async def cmd_dominant(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /dominant command"""
-        user_id = update.effective_user.id
-        
-        if user_id not in self.sessions:
-            await update.message.reply_text("❌ Belum ada hubungan. /start dulu!")
-            return ConversationHandler.END
-        
-        # Jika ada argumen angka
-        if context.args and context.args[0].isdigit():
-            level = int(context.args[0])
-            if 1 <= level <= 5:
-                self.dominance.set_level(level)
-                self.sessions[user_id]['dominance_level'] = level
-                
-                info = self.dominance.get_level_info(level)
-                await update.message.reply_text(
-                    f"✅ Mode dominan diubah ke **Level {level}: {info['name']}**\n"
-                    f"{info['description']}\n\n"
-                    f"{self.dominance.get_phrase('action')}",
-                    parse_mode='Markdown'
-                )
-                return ConversationHandler.END
-        
-        # Tampilkan pilihan level
-        keyboard = [
-            [InlineKeyboardButton("1 - Submissive 🥺", callback_data="dom_1")],
-            [InlineKeyboardButton("2 - Switch 🔄", callback_data="dom_2")],
-            [InlineKeyboardButton("3 - Dominant 👑", callback_data="dom_3")],
-            [InlineKeyboardButton("4 - Very Dominant 👑👑", callback_data="dom_4")],
-            [InlineKeyboardButton("5 - Agresif 🔥", callback_data="dom_5")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        current = self.sessions[user_id].get('dominance_level', 1)
-        info = self.dominance.get_level_info(current)
-        
-        await update.message.reply_text(
-            f"👑 **Pilih Level Dominan**\n\n"
-            f"Saat ini: Level {current} - {info['name']} {info['emoji']}\n"
-            f"{info['description']}\n\n"
-            f"Pilih level baru:",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        
-        return SELECTING_DOMINANT
-    
-    async def dominant_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Callback untuk pemilihan level dominan"""
-        query = update.callback_query
-        await query.answer()
-        
-        user_id = query.from_user.id
-        level = int(query.data.replace("dom_", ""))
-        
-        self.dominance.set_level(level)
-        self.sessions[user_id]['dominance_level'] = level
-        
-        info = self.dominance.get_level_info(level)
-        
-        await query.edit_message_text(
-            f"✅ Mode dominan diubah ke **Level {level}: {info['name']}**\n"
-            f"{info['description']}\n\n"
-            f"{self.dominance.get_phrase('action')}",
-            parse_mode='Markdown'
-        )
-        
-        return ConversationHandler.END
-    
-    # ===== POSITION COMMAND =====
-    
-    async def cmd_position(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /position command"""
-        user_id = update.effective_user.id
-        
-        if user_id not in self.sessions:
-            await update.message.reply_text("❌ Belum ada hubungan. /start dulu!")
-            return ConversationHandler.END
-        
-        # Untuk sementara, tampilkan pesan bahwa fitur belum lengkap
-        await update.message.reply_text(
-            "🔄 **Fitur Position akan segera hadir!**\n\n"
-            "Sementara ini, nikmati fitur-fitur lain yang sudah tersedia.",
-            parse_mode='Markdown'
-        )
-        
-        return ConversationHandler.END
-    
-    async def position_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Callback untuk pemilihan posisi"""
-        query = update.callback_query
-        await query.answer()
-        
-        await query.edit_message_text(
-            "🔄 Fitur position sedang dalam pengembangan."
-        )
-        
-        return ConversationHandler.END
-    
-    # ===== PUBLIC SEX COMMAND =====
-    
-    async def cmd_public(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /public command"""
-        user_id = update.effective_user.id
-        
-        if user_id not in self.sessions:
-            await update.message.reply_text("❌ Belum ada hubungan. /start dulu!")
-            return ConversationHandler.END
-        
-        # Untuk sementara, tampilkan pesan bahwa fitur belum lengkap
-        await update.message.reply_text(
-            "📍 **Fitur Public Sex akan segera hadir!**\n\n"
-            "Sementara ini, nikmati fitur-fitur lain yang sudah tersedia.",
-            parse_mode='Markdown'
-        )
-        
-        return ConversationHandler.END
-    
-    async def public_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Callback untuk pemilihan lokasi publik"""
-        query = update.callback_query
-        await query.answer()
-        
-        await query.edit_message_text(
-            "📍 Fitur public sex sedang dalam pengembangan."
-        )
-        
-        return ConversationHandler.END
-    
-    # ===== MY CLIMAX COMMAND =====
-    
-    async def cmd_myclimax(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /myclimax command"""
-        user_id = update.effective_user.id
-        
-        if user_id not in self.sessions:
-            await update.message.reply_text("❌ Belum ada hubungan. /start dulu!")
-            return
-        
-        session = self.sessions[user_id]
-        
-        # Hitung statistik
-        bot = session.get('bot_climax', 0)
-        user = session.get('user_climax', 0)
-        together = session.get('together_climax', 0)
-        total = bot + user
-        
-        # Hitung rata-rata per session (jika ada history)
-        rels = self.db.get_user_relationships(user_id)
-        total_history = sum(r.get('bot_climax', 0) + r.get('user_climax', 0) for r in rels)
-        
-        text = f"""
-📊 **STATISTIK CLIMAX PRIBADI**
-
-🔥 **Session Saat Ini:**
-• Bot Climax: {bot}x
-• User Climax: {user}x
-• Together: {together}x
-• **Total: {total}x**
-
-📈 **Riwayat Hubungan:**
-• Total dari semua HTS/FWB: {total_history}x
-• Jumlah hubungan tersimpan: {len(rels)}
-        """
-        
-        if session.get('unique_id'):
-            text += f"\n🆔 **ID Aktif:** `{session['unique_id']}`"
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-    
-    # ===== CLIMAX RANK COMMAND =====
-    
-    async def cmd_climaxrank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /climaxrank command"""
-        if not context.args:
-            # Tampilkan TOP 10
-            top = self.ranking.get_top_10()
-            
-            if not top:
-                await update.message.reply_text(
-                    "🏆 **TOP 10 HTS/FWB**\n\nBelum ada data ranking.",
-                    parse_mode='Markdown'
-                )
-                return
-            
-            text = self.ranking.format_top_10()
-            await update.message.reply_text(text, parse_mode='Markdown')
-            return
-        
-        # Cek specific ID
-        unique_id = context.args[0]
-        rank = self.ranking.get_user_rank(unique_id)
-        
-        if rank:
-            await update.message.reply_text(
-                f"🏆 **Peringkat #{rank}** untuk `{unique_id}`",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text(
-                f"❌ ID `{unique_id}` tidak ditemukan di TOP 10.",
-                parse_mode='Markdown'
-            )
-    
-    # ===== CLIMAX HISTORY COMMAND =====
-    
-    async def cmd_climaxhistory(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /climaxhistory command"""
-        if not context.args:
-            await update.message.reply_text(
-                "📜 Gunakan: `/climaxhistory [unique_id]`\n"
-                "Contoh: `/climaxhistory HTS-JANDA-1234-251224-001`",
-                parse_mode='Markdown'
-            )
-            return
-        
-        unique_id = context.args[0]
-        
-        # Untuk sementara, tampilkan pesan bahwa fitur akan datang
-        await update.message.reply_text(
-            f"📜 **History Climax untuk `{unique_id}`**\n\n"
-            f"Fitur ini akan segera hadir! Sementara itu, nikmati fitur lain.",
-            parse_mode='Markdown'
-        )
     
     # ===== HTS/FWB COMMANDS =====
     
@@ -740,7 +444,6 @@ class TelegramHandlers:
             'user_climax': rel.get('user_climax', 0),
             'together_climax': rel.get('together_climax', 0),
             'messages': rel.get('total_messages', 0),
-            'dominance_level': 1,
             'last_active': datetime.now().isoformat()
         }
         
@@ -787,7 +490,6 @@ class TelegramHandlers:
             'user_climax': rel.get('user_climax', 0),
             'together_climax': rel.get('together_climax', 0),
             'messages': rel.get('total_messages', 0),
-            'dominance_level': 1,
             'last_active': datetime.now().isoformat()
         }
         
@@ -1108,25 +810,8 @@ class TelegramHandlers:
         self.db.save_conversation(
             user_id, 
             "user", 
-            message,
-            position=session.get('position'),
-            location=session.get('location'),
-            dominance_level=session.get('dominance_level')
+            message
         )
-        
-        # Deteksi trigger dominan
-        trigger_level = self.dominance.check_trigger(message)
-        if trigger_level:
-            self.dominance.set_level(trigger_level)
-            session['dominance_level'] = trigger_level
-            response = f"*menyesuaikan* {self.dominance.get_phrase('request')}"
-            await update.message.reply_text(response)
-            return
-        
-        # Update arousal-based dominance
-        self.dominance.update_from_arousal(session.get('arousal', 0))
-        if self.dominance.current_level != session.get('dominance_level'):
-            session['dominance_level'] = self.dominance.current_level
         
         # Simple response
         responses = [
@@ -1145,10 +830,7 @@ class TelegramHandlers:
         self.db.save_conversation(
             user_id,
             "assistant",
-            response,
-            position=session.get('position'),
-            location=session.get('location'),
-            dominance_level=session.get('dominance_level')
+            response
         )
         
         if level_up:
