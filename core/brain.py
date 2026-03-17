@@ -240,3 +240,22 @@ class Brain:
         self.emotion = EmotionEngine(self.personality)
         # Memory tidak di-reset, tetap ada
         logger.info(f"🔄 Brain reset for user {self.user_id}")
+
+    def to_dict(self) -> dict:
+        """Konversi brain ke dictionary untuk disimpan"""
+        return {
+            'user_id': self.user_id,
+            'name': self.name,
+            'role': self.role,
+            'interaction_count': self.interaction_count,
+            'emotional_state': self.emotion.get_state(),
+            'personality': self.personality.tolist()
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict, user_id: int, role: str, db_path: str):
+        """Buat brain dari dictionary"""
+        brain = cls(user_id, role, db_path)
+        brain.interaction_count = data.get('interaction_count', 0)
+        # Emotional state akan di-load oleh state manager
+        return brain
